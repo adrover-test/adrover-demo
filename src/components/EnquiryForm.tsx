@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { moneyFormat, numberFormat, readCampaign } from "../lib/campaign";
+import { campaignDescription, readCampaign } from "../lib/campaign";
 import { requestDownload } from "../lib/download";
 import { saveDemoEnquiry } from "../lib/portal";
 import { VehicleOptions } from "./VehicleOptions";
@@ -65,7 +65,7 @@ export function EnquiryForm() {
       "Service city: Hyderabad",
       "",
       estimate
-        ? `ILLUSTRATIVE PLAN: ${estimate.vehicles} total vehicles, ${estimate.days} days, ${estimate.dailyPlays} plays per vehicle/day. ${numberFormat.format(estimate.plays)} plays; ${moneyFormat.format(estimate.cost)} at assumed INR 0.25/play. This is not a quote.`
+        ? `ILLUSTRATIVE PLAN: ${campaignDescription(estimate)} This is not a quote.`
         : "Campaign scope and budget: to be discussed.",
       "",
       `Requirements: ${value("message") || "To be discussed"}`,
@@ -91,8 +91,8 @@ export function EnquiryForm() {
       <div id="incoming-campaign" className="summary-box" hidden={!estimate}>
         {estimate &&
           (formatChanged
-            ? `Updated format: ${format}. Illustrative plan: ${estimate.vehicles} vehicles, ${estimate.days} days, ${estimate.dailyPlays} plays/vehicle/day. ${numberFormat.format(estimate.plays)} plays; ${moneyFormat.format(estimate.cost)}. Same assumed INR 0.25/play; final format pricing requires confirmation.`
-            : `From your illustrative estimate: ${estimate.vehicles} vehicles, ${estimate.days} days, ${estimate.dailyPlays} plays/vehicle/day. ${numberFormat.format(estimate.plays)} estimated plays; ${moneyFormat.format(estimate.cost)} at an assumed INR 0.25/play. Format: ${format}. Not a quote.`)}
+            ? `Updated format: ${format}. Original illustrative plan: ${campaignDescription(estimate)} Final format pricing requires confirmation.`
+            : `From your illustrative estimate: ${campaignDescription(estimate)} Format: ${format}. Not a quote.`)}
       </div>
       <p
         id="incoming-error"

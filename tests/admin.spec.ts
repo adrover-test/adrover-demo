@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { seedDemoSession } from "./demo-session";
 
 async function signInAdmin(page: Page, destination = "admin.html") {
   await page.goto(`admin-login.html?next=${encodeURIComponent(destination)}`);
@@ -23,10 +24,7 @@ test("admin access is separate from advertiser access and logout clears only adm
 }) => {
   await page.goto("admin.html?section=cabs");
   await expect(page).toHaveURL(/admin-login\.html\?next=/);
-  await page.goto("login.html");
-  await page.getByLabel("Business email").fill("client@example.com");
-  await page.locator("#login-password").fill("client-demo-password");
-  await page.getByRole("button", { name: /Enter advertiser portal/ }).click();
+  await seedDemoSession(page, "client@example.com");
   await expect(page).toHaveURL(/dashboard\.html$/);
   await page.goto("admin.html");
   await expect(page).toHaveURL(/admin-login\.html\?next=/);
@@ -316,10 +314,7 @@ test("client campaign can be approved with plays and INR amount and stays unsche
   page.on("request", (request) => {
     if (request.method() !== "GET") nonGetRequests.push(request.url());
   });
-  await page.goto("login.html");
-  await page.locator("#login-email").fill("new-client@example.com");
-  await page.locator("#login-password").fill("client-demo-password");
-  await page.getByRole("button", { name: /Enter advertiser portal/ }).click();
+  await seedDemoSession(page, "new-client@example.com");
   await expect(page).toHaveURL(/dashboard\.html$/);
   await page.goto("create-ad.html");
   await page.getByLabel("Advertisement name").fill("Admin review journey");
@@ -397,10 +392,7 @@ test("client campaign can be approved with plays and INR amount and stays unsche
 test("client info displays advertiser profile changes and separate sign-in email", async ({
   page,
 }) => {
-  await page.goto("login.html");
-  await page.locator("#login-email").fill("profile-owner@example.com");
-  await page.locator("#login-password").fill("test-password");
-  await page.getByRole("button", { name: /Enter advertiser portal/ }).click();
+  await seedDemoSession(page, "profile-owner@example.com");
   await expect(page).toHaveURL(/dashboard\.html$/);
   await page.goto("profile.html");
   await page.getByRole("button", { name: /Edit profile/ }).click();

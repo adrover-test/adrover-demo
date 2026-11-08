@@ -1,5 +1,47 @@
 import { expect, test } from "@playwright/test";
-import { calculate, campaignQuery, readCampaign } from "../src/lib/campaign";
+import {
+  calculate,
+  calculateAds,
+  campaignQuery,
+  readCampaign,
+} from "../src/lib/campaign";
+
+test("total ad pricing uses 30 paise without multiplying cabs or duration", () => {
+  for (const vehicles of [1, 20, 100]) {
+    for (const weeks of [1, 2, 3]) {
+      const result = calculateAds(vehicles, 1000, weeks);
+      expect(result).toMatchObject({
+        ok: true,
+        estimate: {
+          vehicles,
+          weeks,
+          days: weeks * 7,
+          plays: 1000,
+          cost: 300,
+          type: "Cabs",
+        },
+      });
+      if (result.ok)
+        expect(readCampaign(`?${campaignQuery(result.estimate)}`)).toEqual(
+          result,
+        );
+    }
+  }
+  expect(calculateAds(20, 1001, 1)).toMatchObject({
+    ok: true,
+    estimate: { cost: 300.3 },
+  });
+  for (const ads of [null, "", 999, 1000.5, Number.MAX_SAFE_INTEGER]) {
+    expect(calculateAds(20, ads, 1).ok).toBe(false);
+  }
+  for (const weeks of [null, "", 0, 4, 1.5]) {
+    expect(calculateAds(20, 1000, weeks).ok).toBe(false);
+  }
+  expect(
+    readCampaign("?vehicles=20&ads=1000&weeks=1&type=Buses"),
+  ).toMatchObject({ ok: false });
+  expect(readCampaign("?ads=1000")).toMatchObject({ ok: false });
+});
 
 test("campaign calculation, supported formats and handoff", () => {
   for (const type of ["Both", "Cabs", "Buses"]) {

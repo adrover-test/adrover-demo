@@ -5,11 +5,15 @@ import {
   saveProfile,
   saveAdvertisement,
 } from "../lib/portal";
-import { moneyFormat, numberFormat } from "../lib/campaign";
+import {
+  calculateAds,
+  campaignDescription,
+  moneyFormat,
+} from "../lib/campaign";
+import { CampaignPlanner, defaultCampaignSelection } from "./CampaignPlanner";
 
 type Step = "creative" | "client" | "verify" | "plan" | "review";
 
-const starterPlan = { plays: 10_000, days: 7, amount: 1_000 };
 const previewOtp = "123456";
 const steps: { id: Step; label: string }[] = [
   { id: "creative", label: "Creative" },
@@ -19,16 +23,18 @@ const steps: { id: Step; label: string }[] = [
   { id: "review", label: "Review" },
 ];
 
-export function AdvertiserRegistration({
-  videoFile,
-  videoDetails,
-  onBack,
-}: {
-  videoFile: File;
-  videoDetails: string;
-  onBack: () => void;
-}) {
+export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoDetails, setVideoDetails] = useState("");
+  const [videoError, setVideoError] = useState("");
   const [step, setStep] = useState<Step>("creative");
+  const [selection, setSelection] = useState(defaultCampaignSelection);
+  const calculation = calculateAds(
+    selection.vehicles,
+    selection.ads,
+    selection.weeks,
+  );
+  const plan = calculation.ok ? calculation.estimate : null;
   const [adName, setAdName] = useState("");
   const [banner, setBanner] = useState<File | null>(null);
   const [bannerError, setBannerError] = useState("");
@@ -50,10 +56,30 @@ export function AdvertiserRegistration({
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
+    if (!videoFile) {
+      setVideoUrl("");
+      return;
+    }
     const url = URL.createObjectURL(videoFile);
     setVideoUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [videoFile]);
+
+  function selectVideo(file?: File) {
+    setVideoFile(null);
+    setVideoDetails("");
+    setVideoError("");
+    if (!file) return;
+    if (!["video/mp4", "video/webm"].includes(file.type)) {
+      setVideoError("Choose an MP4 or WebM video.");
+      return;
+    }
+    if (!file.size || file.size > 100 * 1024 * 1024) {
+      setVideoError("Choose a non-empty video of 100 MB or less.");
+      return;
+    }
+    setVideoFile(file);
+  }
 
   useEffect(() => {
     if (!banner) {
@@ -119,6 +145,16 @@ export function AdvertiserRegistration({
 
   function register(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!plan) {
+      setError("Select a valid campaign plan before registering.");
+      setStep("plan");
+      return;
+    }
+    if (!videoFile || !videoDetails || videoError) {
+      setError("Choose a playable video before registering.");
+      setStep("creative");
+      return;
+    }
     if (!emailVerified || !phoneVerified) {
       setError("Complete both preview contact checks before registering.");
       return;
@@ -147,12 +183,12 @@ export function AdvertiserRegistration({
       dates: "Start date pending approval",
       status: "Pending approval",
       plays: 0,
-      target: starterPlan.plays,
+      target: plan.plays,
       elapsedDays: 0,
-      totalDays: starterPlan.days,
+      totalDays: plan.days,
       cabs: 0,
       fleet: "Fleet allocation pending review",
-      note: `Starter plan: ${numberFormat.format(starterPlan.plays)} plays over ${starterPlan.days} days · ${moneyFormat.format(starterPlan.amount)} illustrative amount. Video: ${videoFile.name} (${videoDetails}). Banner: ${banner?.name ?? "Not provided"}. No files were uploaded; price and availability require confirmation.`,
+      note: `Campaign plan: ${campaignDescription(plan)} Requested cabs: ${plan.vehicles}. Video: ${videoFile.name} (${videoDetails}). Banner: ${banner?.name ?? "Not provided"}. No files were uploaded; price and availability require confirmation.`,
     };
     try {
       startDemoSession(client.email);
@@ -263,11 +299,13 @@ export function AdvertiserRegistration({
               className="registration-form"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (adName.trim() && banner) {
+                if (adName.trim() && banner && videoDetails && !videoError) {
                   setError("");
                   setStep("client");
                 } else {
-                  setError("Enter an ad name and choose a banner.");
+                  setError(
+                    "Enter an ad name, choose a banner and a playable video.",
+                  );
                 }
               }}
             >
@@ -336,22 +374,61 @@ export function AdvertiserRegistration({
                       </p>
                     )}
                   </div>
-                  <div className="registration-source">
-                    <video
-                      src={videoUrl}
-                      controls
-                      playsInline
-                      muted
-                      aria-label="Previously selected campaign video"
+                  <div className="field">
+                    <label htmlFor="registration-video">Campaign video *</label>
+                    <input
+                      id="registration-video"
+                      type="file"
+                      accept="video/mp4,video/webm,.mp4,.webm"
+                      aria-describedby="registration-video-guidance"
+                      onChange={(event) => selectVideo(event.target.files?.[0])}
                     />
-                    <div className="registration-source-copy">
-                      <span className="registration-asset-label">
-                        SELECTED VIDEO
-                      </span>
-                      <strong>{videoFile.name}</strong>
-                      <span>{videoDetails}</span>
-                    </div>
+                    <p className="fine" id="registration-video-guidance">
+                      MP4 or WebM · up to 100 MB. Local preview only.
+                    </p>
+                    {videoError && (
+                      <p className="error" role="alert">
+                        {videoError}
+                      </p>
+                    )}
                   </div>
+                  {videoFile && (
+                    <div className="registration-source">
+                      <video
+                        key={videoUrl}
+                        src={videoUrl}
+                        controls
+                        playsInline
+                        muted
+                        aria-label="Previously selected campaign video"
+                        onLoadedMetadata={(event) => {
+                          const video = event.currentTarget;
+                          if (video.videoWidth > 0 && video.videoHeight > 0) {
+                            setVideoDetails(
+                              `${video.videoWidth} × ${video.videoHeight}`,
+                            );
+                          } else {
+                            setVideoError(
+                              "This video could not be played. Choose another file.",
+                            );
+                          }
+                        }}
+                        onError={() => {
+                          setVideoDetails("");
+                          setVideoError(
+                            "This video could not be played. Choose another file.",
+                          );
+                        }}
+                      />
+                      <div className="registration-source-copy">
+                        <span className="registration-asset-label">
+                          SELECTED VIDEO
+                        </span>
+                        <strong>{videoFile.name}</strong>
+                        <span>{videoDetails}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <section
                   className="registration-live-preview"
@@ -367,13 +444,20 @@ export function AdvertiserRegistration({
                     </span>
                   </div>
                   <div className="registration-preview-screen">
-                    <video
-                      src={videoUrl}
-                      controls
-                      playsInline
-                      muted
-                      aria-label="Live advertisement video preview"
-                    />
+                    {videoUrl ? (
+                      <video
+                        key={videoUrl}
+                        src={videoUrl}
+                        controls
+                        playsInline
+                        muted
+                        aria-label="Live advertisement video preview"
+                      />
+                    ) : (
+                      <p className="registration-empty-video">
+                        Choose a video to preview it on this screen.
+                      </p>
+                    )}
                     <div className="registration-preview-title">
                       <span className="registration-asset-label">
                         {adName || "YOUR BRAND"}
@@ -409,7 +493,12 @@ export function AdvertiserRegistration({
                 <button
                   className="button yellow"
                   type="submit"
-                  disabled={!adName.trim() || !banner}
+                  disabled={
+                    !adName.trim() ||
+                    !banner ||
+                    !videoDetails ||
+                    Boolean(videoError)
+                  }
                 >
                   Continue to advertiser details
                 </button>
@@ -634,27 +723,15 @@ export function AdvertiserRegistration({
                   04 / CAMPAIGN PLAN
                 </span>
                 <h2>Choose your campaign plan</h2>
-                <p>One starter package is available in this preview.</p>
+                <p>
+                  Select cabs, total ads and duration to estimate your price.
+                </p>
               </div>
-              <label className="registration-plan">
-                <input type="radio" name="starter-plan" checked readOnly />
-                <span className="registration-plan-details">
-                  <span className="registration-plan-topline">
-                    <strong>Starter reach</strong>
-                    <span className="registration-plan-badge">
-                      SELECTED PLAN
-                    </span>
-                  </span>
-                  <span className="registration-plan-metrics">
-                    <strong>{numberFormat.format(starterPlan.plays)}</strong>{" "}
-                    plays <i /> <strong>{starterPlan.days} days</strong>
-                  </span>
-                  <span className="registration-plan-price">
-                    {moneyFormat.format(starterPlan.amount)}{" "}
-                    <small>illustrative</small>
-                  </span>
-                </span>
-              </label>
+              <CampaignPlanner
+                selection={selection}
+                onSelectionChange={setSelection}
+                embedded
+              />
               <p className="registration-disclosure">
                 <strong>Before you continue</strong>No payment is collected.
                 Final pricing, placements and availability require confirmation.
@@ -671,6 +748,7 @@ export function AdvertiserRegistration({
                   className="button yellow"
                   type="button"
                   onClick={() => setStep("review")}
+                  disabled={!plan}
                 >
                   Continue
                 </button>
@@ -697,7 +775,7 @@ export function AdvertiserRegistration({
                 <div>
                   <span>Video</span>
                   <strong>
-                    {videoFile.name} · {videoDetails}
+                    {videoFile?.name} · {videoDetails}
                   </strong>
                 </div>
                 <div>
@@ -719,9 +797,9 @@ export function AdvertiserRegistration({
                 <div>
                   <span>Plan</span>
                   <strong>
-                    {numberFormat.format(starterPlan.plays)} plays ·{" "}
-                    {starterPlan.days} days ·{" "}
-                    {moneyFormat.format(starterPlan.amount)}
+                    {plan
+                      ? campaignDescription(plan)
+                      : "Select a valid campaign plan"}
                   </strong>
                 </div>
               </div>
@@ -776,18 +854,71 @@ export function AdvertiserRegistration({
           </div>
           <div className="registration-summary-details">
             <div>
-              <span>Reach</span>
-              <strong>{numberFormat.format(starterPlan.plays)} plays</strong>
+              <label htmlFor="summary-ads">Total ads</label>
+              <input
+                id="summary-ads"
+                type="number"
+                min="1000"
+                step="1"
+                value={selection.ads}
+                onChange={(event) =>
+                  setSelection({ ...selection, ads: event.target.value })
+                }
+                aria-describedby="summary-pricing-note summary-pricing-error"
+              />
             </div>
             <div>
-              <span>Duration</span>
-              <strong>{starterPlan.days} days</strong>
+              <label htmlFor="summary-weeks">Duration</label>
+              <select
+                id="summary-weeks"
+                value={selection.weeks}
+                onChange={(event) =>
+                  setSelection({
+                    ...selection,
+                    weeks: Number(event.target.value),
+                  })
+                }
+              >
+                {[1, 2, 3].map((weeks) => (
+                  <option key={weeks} value={weeks}>
+                    {weeks} {weeks === 1 ? "week" : "weeks"} ({weeks * 7} days)
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
+              <label htmlFor="summary-cabs">Requested cabs</label>
+              <input
+                id="summary-cabs"
+                type="number"
+                min="1"
+                step="1"
+                value={selection.vehicles}
+                onChange={(event) =>
+                  setSelection({ ...selection, vehicles: event.target.value })
+                }
+                aria-describedby="summary-pricing-error"
+              />
+            </div>
+            <div className="registration-summary-total">
               <span>Plan amount</span>
-              <strong>{moneyFormat.format(starterPlan.amount)}</strong>
+              <strong role="status" aria-live="polite" id="summary-price">
+                {plan ? moneyFormat.format(plan.cost) : "—"}
+              </strong>
             </div>
           </div>
+          <p
+            id="summary-pricing-error"
+            className="error"
+            role="alert"
+            hidden={calculation.ok}
+          >
+            {!calculation.ok && calculation.error}
+          </p>
+          <p id="summary-pricing-note">
+            Minimum 1,000 ads. Total ads × ₹0.30 across all cabs and weeks;
+            taxes extra.
+          </p>
           <div className="registration-summary-status">
             <span aria-hidden="true" />
             Preview · Pending approval
@@ -815,9 +946,7 @@ export function AdvertiserRegistration({
               review. No files or messages were sent.
             </p>
             <div className="registration-success-plan">
-              {numberFormat.format(starterPlan.plays)} plays ·{" "}
-              {starterPlan.days} days · {moneyFormat.format(starterPlan.amount)}{" "}
-              illustrative
+              {plan && campaignDescription(plan)} illustrative
             </div>
             <a className="button yellow" href="dashboard.html">
               Go to advertiser dashboard

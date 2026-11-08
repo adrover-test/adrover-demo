@@ -40,6 +40,6 @@ test("reduced motion omits the page entrance without hiding content or anchors",
   await expect(page.locator(".ad-page-entrance")).toBeHidden();
   await expect(page.locator("#testimonials")).toBeInViewport();
   await page.goto("login.html");
-  await expect(page.getByLabel("Business email")).toBeEditable();
+  await expect(page.getByLabel("Phone number", { exact: true })).toBeEditable();
   await expect(page.locator(".ad-page-entrance")).toBeHidden();
 });

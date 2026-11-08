@@ -12,6 +12,7 @@ export default defineConfig({
           "index",
           "faq",
           "pricing",
+          "register",
           "contact",
           "login",
           "dashboard",

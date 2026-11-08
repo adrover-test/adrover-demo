@@ -1,10 +1,12 @@
 import { expect, test, type Download, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+import { seedDemoSession } from "./demo-session";
 
 const pages = [
   "index",
   "faq",
   "pricing",
+  "register",
   "contact",
   "login",
   "dashboard",
@@ -30,10 +32,7 @@ async function downloadedText(download: Download) {
 }
 
 async function signInDemo(page: Page, next: string) {
-  await page.goto(`login.html?next=${encodeURIComponent(next)}`);
-  await page.locator("#login-email").fill("advertiser@example.com");
-  await page.locator("#login-password").fill("demo-password");
-  await page.getByRole("button", { name: /Enter advertiser portal/ }).click();
+  await seedDemoSession(page, "advertiser@example.com", next);
 }
 
 for (const slug of pages) {
@@ -124,6 +123,7 @@ for (const slug of pages) {
       await expect(page.locator("header .links a")).toHaveText([
         "Home",
         "Pricing",
+        "Register",
         "Contact us",
         "Log in",
       ]);
@@ -377,39 +377,52 @@ test("calculator validates inputs and hands campaign to contact under repository
   const videoBox = await page.locator("#video-preview").boundingBox();
   expect(plannerBox!.y + plannerBox!.height).toBeLessThanOrEqual(videoBox!.y);
   if (page.viewportSize()!.width > 800) {
-    expect(plannerBox!.height).toBeLessThan(400);
+    expect(plannerBox!.height).toBeLessThan(450);
+  } else {
+    expect(plannerBox!.height).toBeLessThan(900);
   }
-  await expect(page.locator("#total-cost")).toHaveText("\u20b92,500");
-  await expect(page.locator("#total-plays")).toHaveText("10,000");
-  for (const value of ["", "0", "-1", "1.5", "9007199254740991"]) {
+  await expect(page.locator("#total-cost")).toHaveText("\u20b9300");
+  await expect(page.locator("#total-plays")).toHaveText("1,000");
+  for (const value of ["", "0", "-1", "1.5"]) {
     await page.locator("#vehicle-count").fill(value);
     await expect(page.locator("#pricing-error")).toBeVisible();
-    await expect(page.locator("#pricing-result")).toBeHidden();
+    await expect(page.locator("#total-cost")).toHaveText("—");
     await expect(page.locator("#continue-enquiry")).toBeDisabled();
   }
   await page.locator("#vehicle-count").fill("12");
-  await page.locator("#campaign-days").fill("7");
-  await page.locator("#daily-plays").fill("25");
-  await page.locator("#vehicle-type").selectOption("Cabs");
-  await expect(page.locator("#total-plays")).toHaveText("2,100");
-  await expect(page.locator("#total-cost")).toHaveText("\u20b9525");
+  for (const value of ["", "999", "1000.5", "9007199254740991"]) {
+    await page.locator("#ad-count").fill(value);
+    await expect(page.locator("#pricing-error")).toBeVisible();
+    await expect(page.locator("#continue-enquiry")).toBeDisabled();
+  }
+  await page.locator("#ad-count").fill("2500");
+  await page.getByRole("button", { name: "2 Weeks (14 days)" }).click();
+  await expect(
+    page.getByRole("button", { name: "2 Weeks (14 days)" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#pricing-result")).toContainText("12");
+  await expect(page.locator("#pricing-result")).toContainText(
+    "2 Weeks (14 days)",
+  );
+  await expect(page.locator("#total-plays")).toHaveText("2,500");
+  await expect(page.locator("#total-cost")).toHaveText("\u20b9750");
   await page.locator("#continue-enquiry").click();
   await expect(page).toHaveURL(
-    /\/adrover-test\/contact\.html\?vehicles=12&days=7&dailyPlays=25&type=Cabs/,
+    /\/adrover-test\/contact\.html\?vehicles=12&ads=2500&weeks=2&type=Cabs/,
   );
   await expect(page.locator("#incoming-campaign")).toContainText(
-    "12 vehicles, 7 days, 25 plays/vehicle/day",
+    "12 cabs, 2 weeks (14 days)",
   );
   await expect(page.locator("#preferred-format")).toHaveValue("Cabs");
   await page.reload();
   await expect(page.locator("#incoming-campaign")).toContainText(
-    "2,100 estimated plays",
+    "2,500 total ads",
   );
   await page.locator("#preferred-format").selectOption("Buses");
   await expect(page.locator("#incoming-campaign")).toContainText(
     "Updated format: Buses",
   );
-  await expect(page.locator("#incoming-campaign")).toContainText("\u20b9525");
+  await expect(page.locator("#incoming-campaign")).toContainText("\u20b9750");
 });
 
 test("contact rejects malformed campaign links without blocking a new draft", async ({
@@ -433,7 +446,7 @@ test("contact rejects malformed campaign links without blocking a new draft", as
   await expect(page.locator("#incoming-campaign")).toBeHidden();
 });
 
-test("login preview opens the sample dashboard without sending credentials", async ({
+test("client login shows unavailable OTP delivery without granting access", async ({
   page,
 }) => {
   const submissions: string[] = [];
@@ -444,27 +457,19 @@ test("login preview opens the sample dashboard without sending credentials", asy
   await expect(
     page.getByRole("heading", { name: "Welcome back" }),
   ).toBeVisible();
-  await expect(page.locator("#login-email")).toHaveAttribute(
+  await expect(page.locator("#login-phone")).toHaveAttribute(
     "autocomplete",
-    "username",
+    "tel",
   );
-  await expect(page.locator("#login-password")).toHaveAttribute(
+  await expect(page.locator("#login-otp")).toHaveAttribute(
     "autocomplete",
-    "current-password",
+    "one-time-code",
   );
-  await page.getByRole("button", { name: "Show password" }).click();
-  await expect(page.locator("#login-password")).toHaveAttribute("type", "text");
-  await page.getByRole("button", { name: "Hide password" }).click();
-  await expect(page.locator("#login-password")).toHaveAttribute(
-    "type",
-    "password",
-  );
-  await page.locator("#login-email").fill("advertiser@example.com");
-  await page.locator("#login-password").fill("example-password");
-  await page.getByRole("button", { name: /Enter advertiser portal/ }).click();
-  await expect(page).toHaveURL(/dashboard\.html$/);
-  await expect(page.locator(".dashboard-sample-note")).toContainText(
-    "illustrative—not live account data",
+  await page.locator("#login-phone").fill("+919876543210");
+  await page.getByRole("button", { name: /Request OTP/ }).click();
+  await expect(page).toHaveURL(/login\.html$/);
+  await expect(page.locator(".login-status")).toContainText(
+    "No OTP has been generated or sent",
   );
   expect(submissions).toEqual([]);
 });
@@ -745,10 +750,8 @@ test("portal routes require a demo sign-in and exit clears the demo session", as
 }) => {
   await page.goto("dashboard.html");
   await expect(page).toHaveURL(/login\.html\?next=/);
-  await expect(page.locator("#login-password")).toBeVisible();
-  await page.locator("#login-email").fill("advertiser@example.com");
-  await page.locator("#login-password").fill("demo-password");
-  await page.getByRole("button", { name: /Enter advertiser portal/ }).click();
+  await expect(page.locator("#login-phone")).toBeVisible();
+  await seedDemoSession(page, "advertiser@example.com");
   await expect(page).toHaveURL(/dashboard\.html$/);
   await page.locator(".portal-exit").click();
   await expect(page).toHaveURL(/login\.html\?signedOut=1$/);
@@ -856,7 +859,7 @@ test("enquiry validates required fields and saves only a local branded draft", a
   page.on("request", (request) => {
     if (request.method() !== "GET") submissions.push(request.url());
   });
-  await page.goto("contact.html?vehicles=20&days=10&dailyPlays=50&type=Both");
+  await page.goto("contact.html?vehicles=20&ads=1000&weeks=1&type=Cabs");
   await page.getByRole("button", { name: "Save My Enquiry Draft" }).click();
   expect(
     await page
@@ -882,7 +885,8 @@ test("enquiry validates required fields and saves only a local branded draft", a
   expect(text).toContain("ADROVER / CAMPAIGN ENQUIRY DRAFT");
   expect(text).toContain("Name: Asha");
   expect(text).toContain("Interior screen format: Buses");
-  expect(text).toContain("10,000 plays");
+  expect(text).toContain("1,000 total ads");
+  expect(text).toContain("₹300 at INR 0.30/ad");
   expect(text).toContain("Nothing has been submitted or sent.");
   expect(text).not.toMatch(/\badrove\b/i);
   await expect(page.locator("#enquiry-status")).toContainText(

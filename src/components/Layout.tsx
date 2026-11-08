@@ -2,10 +2,12 @@ import { useLayoutEffect, type ReactNode } from "react";
 import { endDemoSession } from "../lib/portal";
 import { endAdminSession } from "../lib/admin";
 import { AdPageEntrance } from "./AdPageEntrance";
+import { CabCursor } from "./CabCursor";
 
 const navigation = [
   ["index.html", "Home"],
   ["pricing.html", "Pricing"],
+  ["register.html", "Register"],
   ["contact.html", "Contact us"],
   ["login.html", "Log in"],
 ] as const;
@@ -64,6 +66,7 @@ export function Layout({
   return (
     <>
       <AdPageEntrance />
+      <CabCursor />
       <a className="skip" href="#main">
         Skip to content
       </a>

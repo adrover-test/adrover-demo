@@ -4,6 +4,7 @@ import { Layout } from "./components/Layout";
 import { Home } from "./pages/Home";
 import { Faq } from "./pages/Faq";
 import { Pricing } from "./pages/Pricing";
+import { Register } from "./pages/Register";
 import { Contact } from "./pages/Contact";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
@@ -22,6 +23,7 @@ const pages = {
   "index.html": Home,
   "faq.html": Faq,
   "pricing.html": Pricing,
+  "register.html": Register,
   "contact.html": Contact,
   "login.html": Login,
   "dashboard.html": Dashboard,

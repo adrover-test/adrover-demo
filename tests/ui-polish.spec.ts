@@ -1,12 +1,10 @@
 import { expect, test } from "@playwright/test";
+import { seedDemoSession } from "./demo-session";
 
 test("advertiser and admin navigation share the home brand palette", async ({
   page,
 }) => {
-  await page.goto("login.html");
-  await page.getByLabel("Business email").fill("theme@example.com");
-  await page.locator("#login-password").fill("preview-password");
-  await page.getByRole("button", { name: /Enter advertiser portal/ }).click();
+  await seedDemoSession(page, "theme@example.com");
   await page.goto("advertisements.html");
   await expect(page.locator("body")).toHaveCSS(
     "background-color",

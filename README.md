@@ -34,8 +34,22 @@ The production output is `dist`. The preview URL is normally `http://127.0.0.1:4
 | `index.html` or `/`   | `src/pages/Home.tsx`           | Three-section landing page                |
 | `faq.html`            | `src/pages/Faq.tsx`            | Dedicated expandable FAQ page             |
 | `pricing.html`        | `src/pages/Pricing.tsx`        | Video preview and illustrative calculator |
+| `register.html`       | `src/pages/Register.tsx`       | Video selection and advertiser registration |
+
+Register opens the creative onboarding form directly. Select a campaign video
+and edit total ads, duration and requested cabs directly in the campaign sidebar.
+The sidebar and Plan calculator share selections and update the price immediately.
+Select a video
+and use the same cab/ads/weeks calculator as Pricing in the Plan step. The selected
+total ads, duration and amount update the sidebar, review and saved local brief;
+invalid selections block continuing. Pricing remains INR 0.30 per total ad.
+Select a video
+and banner there to preview them on the mock screen before continuing. MP4/WebM
+videos must be non-empty, browser-playable and at most 100 MB. Files stay local
+and are cleared on refresh. The old `pricing.html#registration` URL redirects to
+`register.html`; Pricing remains a separate calculator and video-preview page.
 | `contact.html`        | `src/pages/Contact.tsx`        | Campaign handoff and local enquiry draft  |
-| `login.html`          | `src/pages/Login.tsx`          | Demo-only advertiser sign-in              |
+| `login.html`          | `src/pages/Login.tsx`          | Client phone/OTP screen (delivery pending) |
 | `dashboard.html`      | `src/pages/Dashboard.tsx`      | Sample advertiser dashboard               |
 | `profile.html`        | `src/pages/Profile.tsx`        | Sample advertiser profile                 |
 | `create-ad.html`      | `src/pages/CreateAd.tsx`       | Campaign setup and local creative preview |
@@ -96,8 +110,8 @@ it removes itself after animation and is omitted for reduced-motion preferences.
 
 Visible navigation and action labels use normal product terminology (Sign in,
 Sign out, Approve ad) instead of repeated demo badges. This is a presentation
-cleanup, not a backend upgrade: both sign-in pages retain a clear notice that
-identities are unverified and storage is browser-local. Financial, testimonial
+cleanup, not a backend upgrade: admin sign-in remains a browser-local demo.
+Client phone sign-in is disabled pending an SMS authentication provider. Financial, testimonial
 and fictional fleet disclosures remain visible; exported reports remain
 explicitly marked as illustrative.
 Navigate
@@ -182,10 +196,19 @@ labeled sample testimonial layout. The shared desktop and mobile navigation
 contains Home, Pricing, Contact us and Log in. Footer FAQ links on all pages open
 the dedicated `faq.html` page; FAQs are no longer embedded in the home footer.
 Footer quick links contain only Login, FAQ, How it works and Contact us.
-The login page opens a clearly labeled dashboard
-demo using any valid email and password. The password is not stored or sent; the
-email is kept in `sessionStorage` for the current browser tab. This is a demo
-route gate, not identity verification or secure authentication. The portal
+The client login page accepts an international phone number (country code with
+no spaces). Its responsive side panel includes three campaign steps, an SVG
+Charminar/cab scene and the current per-ad rate and campaign minimums. Phone login
+accepts the country code with
+no spaces) and shows an OTP field. Request OTP only displays an explicit
+unconfigured-service notice: no OTP is generated, no SMS is sent, and no client
+session is created. Verification remains disabled until a provider is selected.
+Live integration must generate/send and verify OTPs on a trusted backend or
+authentication provider, with expiry, rate limiting and secure sessions. Do not
+put SMS credentials or OTP verification secrets in frontend code.
+The previous email/password demo login has been removed; portal tests seed their
+own browser-local demo sessions independently. Existing portal storage and route
+gates are still demos, not secure authentication or protected backend data. The portal
 includes example campaign metrics and profile details, a searchable sample
 advertisement list, sample campaign detail and billing pages, and campaign
 creation tools that reuse the local video preview and illustrative budget
@@ -256,7 +279,12 @@ the video. Unsupported formats, empty/oversized files and decoding errors are
 shown explicitly. The estimate still passes to `contact.html` for a local draft;
 video data is not included in that handoff. Pricing is illustrative, and preview
 playback does not guarantee compatibility with the physical fleet screens.
-The compact calculator appears directly below the page heading, above the video
+A small cab follows the mouse across pages without replacing the native cursor.
+It hides over form fields and video controls, during keyboard navigation, and on
+touch devices or when reduced motion is enabled.
+
+The compact cab-only calculator keeps the inputs, week selection and live summary
+without promotional benefit tiles or repeated guidance. It appears above the video
 studio. A compact "Before you book" note below the studio summarizes the pricing
 and audience-count caveats and links to Contact us, instead of long FAQ sections.
 
@@ -330,7 +358,11 @@ Use `npm run format` to format source and configuration.
 
 ## Deliberate limitations before a business launch
 
-- The calculator assumes INR 0.25 per play. It is an illustration, not a quotation or
+- The calculator uses INR 0.30 per total ad across the entire campaign, with at least
+  1,000 ads, a positive cab count, and a choice of 1, 2 or 3 weeks. Changing cabs or
+  weeks updates the delivery summary without multiplying the total price. The
+  default 1,000 ads cost INR 300. Older INR 0.25/play enquiry links remain readable
+  with their original calculation. It is an illustration, not a quotation or
   reservation. Tax, fees, availability and delivery commitments are not calculated.
 - Contact fields download a local text draft only. Nothing is sent, uploaded or stored on a
   backend. The site has no admin login, payment integration or server video uploads;
