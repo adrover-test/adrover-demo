@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Adrover Advertiser",
+    "slug": "adrover-advertiser",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#087a45"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.adrover.advertiser"
+    },
+    "android": {
+      "package": "com.adrover.advertiser",
+      "adaptiveIcon": {
+        "backgroundColor": "#ffd21c"
+      }
+    },
+    "plugins": [
+      "expo-asset"
+    ]
+  }
+}
