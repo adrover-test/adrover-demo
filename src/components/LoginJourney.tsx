@@ -142,15 +142,15 @@ export function LoginJourney() {
       <div className="login-journey-stats">
         <div>
           <strong>₹0.30</strong>
-          <span>Per ad</span>
+          <span>Per 30-second play</span>
         </div>
         <div>
-          <strong>1,000</strong>
-          <span>Ads minimum</span>
+          <strong>10,000</strong>
+          <span>Estimated plays</span>
         </div>
         <div>
-          <strong>7 days</strong>
-          <span>Minimum</span>
+          <strong>20 × 10 × 50</strong>
+          <span>Cabs × days × plays per cab/day</span>
         </div>
       </div>
     </div>

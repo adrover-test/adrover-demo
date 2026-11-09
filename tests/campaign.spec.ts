@@ -1,75 +1,61 @@
 import { expect, test } from "@playwright/test";
 import {
   calculate,
-  calculateAds,
+  campaignDescription,
   campaignQuery,
+  isVehicleType,
   readCampaign,
+  supportedTypes,
 } from "../src/lib/campaign";
 
-test("total ad pricing uses 30 paise without multiplying cabs or duration", () => {
-  for (const vehicles of [1, 20, 100]) {
-    for (const weeks of [1, 2, 3]) {
-      const result = calculateAds(vehicles, 1000, weeks);
-      expect(result).toMatchObject({
-        ok: true,
-        estimate: {
-          vehicles,
-          weeks,
-          days: weeks * 7,
-          plays: 1000,
-          cost: 300,
-          type: "Cabs",
-        },
-      });
-      if (result.ok)
-        expect(readCampaign(`?${campaignQuery(result.estimate)}`)).toEqual(
-          result,
-        );
-    }
-  }
-  expect(calculateAds(20, 1001, 1)).toMatchObject({
+test("campaign estimate multiplies cabs, days and daily plays at 30 paise", () => {
+  const result = calculate(20, 10, 50, "Cabs");
+  expect(result).toEqual({
     ok: true,
-    estimate: { cost: 300.3 },
+    estimate: {
+      vehicles: 20,
+      days: 10,
+      dailyPlays: 50,
+      type: "Cabs",
+      plays: 10_000,
+      cost: 3_000,
+    },
   });
-  for (const ads of [null, "", 999, 1000.5, Number.MAX_SAFE_INTEGER]) {
-    expect(calculateAds(20, ads, 1).ok).toBe(false);
-  }
-  for (const weeks of [null, "", 0, 4, 1.5]) {
-    expect(calculateAds(20, 1000, weeks).ok).toBe(false);
-  }
+  if (!result.ok) return;
+  expect(campaignDescription(result.estimate)).toContain(
+    "20 cabs × 10 days × 50 plays per cab per day = 10,000 estimated 30-second plays",
+  );
+  expect(campaignDescription(result.estimate)).toContain(
+    "₹3,000 at ₹0.30 per play",
+  );
+  expect(readCampaign(`?${campaignQuery(result.estimate)}`)).toEqual(result);
+});
+
+test("total estimated plays must be greater than 1,000", () => {
+  expect(calculate(1, 1, 1000, "Cabs")).toMatchObject({
+    ok: false,
+    error: "Total estimated plays must be greater than 1,000.",
+  });
+  expect(calculate(1, 1, 1001, "Cabs")).toMatchObject({
+    ok: true,
+    estimate: { plays: 1001, cost: 300.3 },
+  });
+});
+
+test("cab is the only supported format", () => {
+  expect(supportedTypes).toEqual(["Cabs"]);
+  expect(isVehicleType("Cabs")).toBe(true);
+  expect(isVehicleType("Buses")).toBe(false);
+  expect(isVehicleType("Both")).toBe(false);
+  expect(calculate(20, 10, 50, "Buses").ok).toBe(false);
+  expect(calculate(20, 10, 50, "Both").ok).toBe(false);
   expect(
-    readCampaign("?vehicles=20&ads=1000&weeks=1&type=Buses"),
+    readCampaign("?vehicles=20&days=10&dailyPlays=50&type=Buses"),
   ).toMatchObject({ ok: false });
-  expect(readCampaign("?ads=1000")).toMatchObject({ ok: false });
 });
 
-test("campaign calculation, supported formats and handoff", () => {
-  for (const type of ["Both", "Cabs", "Buses"]) {
-    const result = calculate("20", "10", "50", type);
-    expect(result).toEqual({
-      ok: true,
-      estimate: {
-        vehicles: 20,
-        days: 10,
-        dailyPlays: 50,
-        type,
-        plays: 10_000,
-        cost: 2_500,
-      },
-    });
-    if (result.ok)
-      expect(readCampaign(`?${campaignQuery(result.estimate)}`)).toEqual(
-        result,
-      );
-  }
-  expect(calculate(1, 1, 1, "Cabs")).toMatchObject({
-    ok: true,
-    estimate: { cost: 0.25, plays: 1 },
-  });
-});
-
-test("rejects invalid numbers, unsupported formats and unsafe totals", () => {
-  for (const value of [
+test("rejects invalid numbers and unsafe estimates", () => {
+  const invalid = [
     "",
     " ",
     "nope",
@@ -80,19 +66,27 @@ test("rejects invalid numbers, unsupported formats and unsafe totals", () => {
     "1.5",
     null,
     Number.MAX_SAFE_INTEGER + 1,
-  ]) {
-    expect(calculate(value, 10, 50, "Both").ok).toBe(false);
-    expect(calculate(20, value, 50, "Both").ok).toBe(false);
-    expect(calculate(20, 10, value, "Both").ok).toBe(false);
+  ];
+  for (const value of invalid) {
+    expect(calculate(value, 10, 50, "Cabs").ok).toBe(false);
+    expect(calculate(20, value, 50, "Cabs").ok).toBe(false);
+    expect(calculate(20, 10, value, "Cabs").ok).toBe(false);
   }
-  expect(calculate(20, 10, 50, "Train").ok).toBe(false);
-  expect(calculate(Number.MAX_SAFE_INTEGER, 1, 1, "Both")).toMatchObject({
+  expect(calculate(Number.MAX_SAFE_INTEGER, 1, 1, "Cabs")).toMatchObject({
     ok: false,
     error: expect.stringContaining("too large"),
   });
+  const maximumPlays = Math.floor(Number.MAX_SAFE_INTEGER / 30);
+  expect(calculate(1, 1, maximumPlays, "Cabs").ok).toBe(true);
+  expect(calculate(1, 1, maximumPlays + 1, "Cabs").ok).toBe(false);
+  expect(calculate(20, 10, 50, "Train").ok).toBe(false);
+});
+
+test("reads only valid current campaign links", () => {
   expect(readCampaign("?unrelated=true")).toBeNull();
   expect(readCampaign("?vehicles=20")).toMatchObject({ ok: false });
-  const maximumPlays = Math.floor(Number.MAX_SAFE_INTEGER / 25);
-  expect(calculate(maximumPlays, 1, 1, "Both").ok).toBe(true);
-  expect(calculate(maximumPlays + 1, 1, 1, "Both").ok).toBe(false);
+  expect(readCampaign("?ads=1000")).toMatchObject({
+    ok: false,
+    error: expect.stringContaining("outdated"),
+  });
 });

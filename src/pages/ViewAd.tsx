@@ -1,4 +1,5 @@
 import { PortalSidebar } from "../components/PortalSidebar";
+import { AdLocationHistory } from "../components/AdLocationHistory";
 import type { Advertisement } from "../lib/advertisements";
 import { moneyFormat, numberFormat } from "../lib/campaign";
 import { requestDownload } from "../lib/download";
@@ -253,6 +254,7 @@ export function ViewAd({
             </p>
           </aside>
         </section>
+        {admin && <AdLocationHistory advertisement={ad} />}
       </div>
     </section>
   );

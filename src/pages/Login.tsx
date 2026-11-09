@@ -1,17 +1,33 @@
 import { useState, type FormEvent } from "react";
 import { LoginJourney } from "../components/LoginJourney";
+import { getDemoRedirect, startDemoSession } from "../lib/portal";
+
+const demoOtp = "123456";
 
 export function Login() {
   const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpRequested, setOtpRequested] = useState(false);
   const [error, setError] = useState("");
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     if (!form.reportValidity()) return;
-    setError(
-      "SMS login is not configured yet. No OTP has been generated or sent. Contact Adrover for assistance.",
-    );
+    setOtp("");
+    setOtpRequested(true);
+    setError(`Demo OTP: ${demoOtp}. This code is shown locally; no SMS was sent.`);
+  }
+
+  function handleVerify() {
+    if (otp !== demoOtp) {
+      setError(`Incorrect demo OTP. Enter ${demoOtp} to continue.`);
+      return;
+    }
+
+    const identity = `phone-${phone.replace(/\D/g, "")}@demo.adrover.local`;
+    startDemoSession(identity);
+    window.location.assign(getDemoRedirect(window.location.search));
   }
 
   return (
@@ -55,6 +71,8 @@ export function Login() {
                 value={phone}
                 onChange={(event) => {
                   setPhone(event.target.value);
+                  setOtp("");
+                  setOtpRequested(false);
                   setError("");
                 }}
                 aria-describedby="login-phone-guidance"
@@ -78,24 +96,30 @@ export function Login() {
                 maxLength={6}
                 placeholder="6-digit OTP"
                 aria-describedby="login-availability"
-                disabled
+                value={otp}
+                onChange={(event) => {
+                  setOtp(event.target.value);
+                  setError("");
+                }}
+                disabled={!otpRequested}
               />
             </div>
 
             <div className="login-options">
-              <span className="fine">SMS verification not yet available</span>
+              <span className="fine">Demo sign-in; no SMS is sent</span>
               <a href="contact.html#launch-notes">Need help signing in?</a>
             </div>
 
             <button className="button yellow login-submit" type="submit">
-              Request OTP
+              Generate demo OTP
             </button>
             <button
               className="button ghost login-submit"
               type="button"
-              disabled
+              onClick={handleVerify}
+              disabled={!otpRequested || otp.length !== 6}
             >
-              Verify OTP and sign in
+              Verify demo OTP and sign in
             </button>
             <p aria-live="polite" className="login-status" role="alert">
               {error}
@@ -108,10 +132,9 @@ export function Login() {
           </div>
 
           <p className="login-disclaimer" id="login-availability">
-            Phone login is awaiting SMS provider configuration. Request OTP
-            currently shows an availability notice only. Your number is not
-            stored or sent, and sign-in remains disabled until server-side OTP
-            verification is connected.
+            Demo only: use OTP 123456 to sign in. The code is fixed in the
+            browser, no SMS is sent, and this does not verify your identity.
+            Production sign-in requires server-side OTP verification.
           </p>
           <a className="text-link" href="admin-login.html">
             Website admin sign in

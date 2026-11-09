@@ -37,19 +37,18 @@ The production output is `dist`. The preview URL is normally `http://127.0.0.1:4
 | `register.html`       | `src/pages/Register.tsx`       | Video selection and advertiser registration |
 
 Register opens the creative onboarding form directly. Select a campaign video
-and edit total ads, duration and requested cabs directly in the campaign sidebar.
+and banner to preview them on the mock screen, then edit campaign days, requested
+cabs and plays per cab per day directly in the campaign sidebar.
 The sidebar and Plan calculator share selections and update the price immediately.
-Select a video
-and use the same cab/ads/weeks calculator as Pricing in the Plan step. The selected
-total ads, duration and amount update the sidebar, review and saved local brief;
-invalid selections block continuing. Pricing remains INR 0.30 per total ad.
-Select a video
-and banner there to preview them on the mock screen before continuing. MP4/WebM
-videos must be non-empty, browser-playable and at most 100 MB. Files stay local
-and are cleared on refresh. The old `pricing.html#registration` URL redirects to
-`register.html`; Pricing remains a separate calculator and video-preview page.
+Select a video and use the same cabs × days × plays-per-cab-per-day calculator as
+Pricing in the Plan step. The total estimated plays and amount update the sidebar,
+review and saved local brief; invalid selections block continuing. Each play is
+30 seconds and is estimated at INR 0.30.
+MP4/WebM videos must be non-empty, browser-playable and at most 100 MB. Files stay
+local and are cleared on refresh. The old `pricing.html#registration` URL redirects
+to `register.html`; Pricing remains a separate calculator and video-preview page.
 | `contact.html`        | `src/pages/Contact.tsx`        | Campaign handoff and local enquiry draft  |
-| `login.html`          | `src/pages/Login.tsx`          | Client phone/OTP screen (delivery pending) |
+| `login.html`          | `src/pages/Login.tsx`          | Client phone login with a fixed demo OTP   |
 | `dashboard.html`      | `src/pages/Dashboard.tsx`      | Sample advertiser dashboard               |
 | `profile.html`        | `src/pages/Profile.tsx`        | Sample advertiser profile                 |
 | `create-ad.html`      | `src/pages/CreateAd.tsx`       | Campaign setup and local creative preview |
@@ -170,8 +169,10 @@ The dashboard's Recent advertisements table links each campaign to its details
 with a View details button. The dashboard omits route distribution, and the
 portal menu contains Dashboard, My advertisements, Payments & history and Profile.
 Campaign creation remains available through the Create new ad page buttons. The
-details page keeps the campaign overview and creative preview without duration
-or performance cards, daily charts, route coverage, or vehicle telemetry.
+details page keeps the campaign overview and creative preview. Admin ad details
+also include a date-filtered schematic map with one simulated playback marker for
+each campaign cab and a matching car/location/time table. These calculated route
+locations are illustrative and are not live GPS or verified playback telemetry.
 Its compact status bar shows campaign status and schedule progress. Active ads
 show remaining days, pending ads show requested days without implying the campaign
 has started, and completed ads show a finished schedule. Sample schedule values
@@ -198,14 +199,14 @@ the dedicated `faq.html` page; FAQs are no longer embedded in the home footer.
 Footer quick links contain only Login, FAQ, How it works and Contact us.
 The client login page accepts an international phone number (country code with
 no spaces). Its responsive side panel includes three campaign steps, an SVG
-Charminar/cab scene and the current per-ad rate and campaign minimums. Phone login
-accepts the country code with
-no spaces) and shows an OTP field. Request OTP only displays an explicit
-unconfigured-service notice: no OTP is generated, no SMS is sent, and no client
-session is created. Verification remains disabled until a provider is selected.
-Live integration must generate/send and verify OTPs on a trusted backend or
-authentication provider, with expiry, rate limiting and secure sessions. Do not
-put SMS credentials or OTP verification secrets in frontend code.
+Charminar/cab scene and the current per-ad rate and campaign minimums. The
+browser-local demo login generates a fixed OTP (`123456`) after phone validation.
+Entering it creates a demo session and redirects to the requested portal page;
+no SMS is sent, and this does not verify identity. The fixed OTP and session are
+not suitable for production. Live integration must generate/send and verify
+OTPs on a trusted backend or authentication provider, with expiry, rate limiting
+and secure sessions. Do not put SMS credentials or OTP verification secrets in
+frontend code.
 The previous email/password demo login has been removed; portal tests seed their
 own browser-local demo sessions independently. Existing portal storage and route
 gates are still demos, not secure authentication or protected backend data. The portal
@@ -358,12 +359,11 @@ Use `npm run format` to format source and configuration.
 
 ## Deliberate limitations before a business launch
 
-- The calculator uses INR 0.30 per total ad across the entire campaign, with at least
-  1,000 ads, a positive cab count, and a choice of 1, 2 or 3 weeks. Changing cabs or
-  weeks updates the delivery summary without multiplying the total price. The
-  default 1,000 ads cost INR 300. Older INR 0.25/play enquiry links remain readable
-  with their original calculation. It is an illustration, not a quotation or
-  reservation. Tax, fees, availability and delivery commitments are not calculated.
+- The calculator estimates total plays as cabs × campaign days × plays per cab per
+  day, at INR 0.30 per 30-second play. The default 20 cabs × 10 days × 50 plays
+  per cab per day equals 10,000 estimated plays and INR 3,000. It is an
+  illustration, not a quotation or reservation. Taxes and final placement details
+  apply at checkout; availability and delivery commitments require confirmation.
 - Contact fields download a local text draft only. Nothing is sent, uploaded or stored on a
   backend. The site has no admin login, payment integration or server video uploads;
   the campaign studio supports private local video previews only.

@@ -21,10 +21,9 @@ test("Register opens the creative form directly with local video playback", asyn
     page.locator(".registration-summary-details > div").last(),
   ).toHaveClass("registration-summary-total");
   await expect(page.locator("#summary-price")).toHaveCSS("font-size", "24px");
-  await page.locator("#summary-ads").fill("2000");
+  await page.locator("#summary-days").fill("14");
   await page.locator("#summary-cabs").fill("15");
-  await page.locator("#summary-weeks").selectOption("2");
-  await expect(page.locator("#summary-price")).toHaveText("₹600");
+  await expect(page.locator("#summary-price")).toHaveText("₹3,150");
   const input = page.locator("#registration-video");
   await input.setInputFiles({
     name: "notes.txt",
@@ -115,39 +114,39 @@ test("Register opens the creative form directly with local video playback", asyn
     .getByRole("button", { name: /^Verify/ })
     .click();
   await page.getByRole("button", { name: /Continue/ }).click();
-  await expect(page.locator("#total-cost")).toHaveText("₹600");
-  await expect(page.locator("#ad-count")).toHaveValue("2000");
+  await expect(page.locator("#total-cost")).toHaveText("₹3,150");
+  await expect(page.locator("#daily-play-count")).toHaveValue("50");
   await expect(page.locator("#vehicle-count")).toHaveValue("15");
   await page.locator("#vehicle-count").fill("12");
-  await page.locator("#ad-count").fill("2500");
-  await page.getByRole("button", { name: "3 Weeks (21 days)" }).click();
-  await expect(page.locator("#total-cost")).toHaveText("₹750");
+  await page.locator("#daily-play-count").fill("2500");
+  await page.locator("#campaign-days").fill("21");
+  await expect(page.locator("#total-cost")).toHaveText("₹1,89,000");
   await expect(page.locator(".registration-summary-details")).toContainText(
     "21 days",
   );
-  await expect(page.locator("#summary-ads")).toHaveValue("2500");
+  await expect(page.locator("#summary-daily-plays")).toHaveValue("2500");
   await expect(page.locator(".registration-summary-details")).toContainText(
-    "₹750",
+    "6,30,000",
   );
-  await page.locator("#ad-count").fill("999");
+  await page.locator("#daily-play-count").fill("0");
   await expect(page.getByRole("button", { name: /^Continue/ })).toBeDisabled();
-  await page.locator("#ad-count").fill("2500");
+  await page.locator("#daily-play-count").fill("2500");
   await page.getByRole("button", { name: /^Continue/ }).click();
   await expect(
     page.getByRole("heading", { name: "Review your registration" }),
   ).toBeVisible();
   await expect(page.locator(".registration-form")).toContainText(
-    "12 cabs, 3 weeks (21 days)",
+    "12 cabs × 21 days × 2,500 plays per cab per day = 6,30,000 estimated",
   );
-  await expect(page.locator(".registration-form")).toContainText("₹750");
+  await expect(page.locator(".registration-form")).toContainText("₹1,89,000");
   await page.getByLabel(/I understand this is a browser-local preview/).check();
   await page.getByRole("button", { name: /Submit for review/ }).click();
-  await expect(page.getByRole("dialog")).toContainText("₹750");
+  await expect(page.getByRole("dialog")).toContainText("₹1,89,000");
   const saved = await page.evaluate(() =>
     JSON.parse(localStorage.getItem("adrover-demo-advertisements") ?? "[]"),
   );
-  expect(saved[0]).toMatchObject({ target: 2500, totalDays: 21 });
-  expect(saved[0].note).toContain("₹750");
+  expect(saved[0]).toMatchObject({ target: 630000, totalDays: 21 });
+  expect(saved[0].note).toContain("₹1,89,000");
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth > innerWidth,

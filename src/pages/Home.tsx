@@ -32,31 +32,30 @@ const uploadSteps = [
   {
     number: "01",
     icon: "story",
-    title: "Choose your story",
-    copy: "Pick the offer, launch or message you want riders to remember.",
+    title: "Choose your campaign",
+    copy: "Select Start Campaign, then choose your target cabs, plays and duration to customize your campaign.",
     preview: "One message. A memorable moment.",
-    guidance:
-      "Start with your business name, one clear message and a simple next step for your audience.",
+    guidance: "Pick the offer, launch or message you want riders to remember.",
     tags: ["Your brand", "Your message", "Your audience"],
   },
   {
     number: "02",
     icon: "upload",
-    title: "Upload your video",
-    copy: "Choose your video on the campaign page and see it play in a cab-screen mockup. Final screen specifications must be confirmed before launch.",
+    title: "Upload your digital ad",
+    copy: "Upload your digital ad and agree to the terms and conditions. Your business is one step away from reaching commuters.",
     preview: "Shape your story for the screen.",
     guidance:
-      "Keep text readable and the message clear without sound. Confirm the final video format with the team before delivery.",
+      "Better ads, bigger impact. Make your message clear, vibrant and attractive to commuters.",
     tags: ["Clear visuals", "Readable text", "Sound-off friendly"],
   },
   {
     number: "03",
     icon: "reach",
     title: "Approve & go live",
-    copy: "Confirm the campaign details, then your story joins the daily journey.",
+    copy: "Review your ad details, complete payment, and get your brand broadcasting across the city fleet.",
     preview: "From your idea to their daily route.",
     guidance:
-      "Review the creative, campaign dates and available placements together before approving any launch.",
+      "Verify your number of cabs, plays and duration, and preview your ad before completing payment.",
     tags: ["Review creative"],
   },
 ] as const;
@@ -113,10 +112,10 @@ export function Home() {
       <section className="landing-hero" id="about">
         <svg
           className="landing-cab-photo"
-          viewBox="0 0 504 683"
+          viewBox="0 0 500 680"
           preserveAspectRatio="xMidYMid slice"
-          width="504"
-          height="683"
+          width="500"
+          height="680"
           role="img"
           aria-label="Six sample Adrover ad screens: good journeys, bigger possibilities, memorable brands, local discoveries, new launches, and your next chapter."
         >
@@ -125,27 +124,46 @@ export function Home() {
             width="504"
             height="683"
           />
+          <g aria-hidden="true">
+            <rect x="131" y="450" width="111" height="10" fill="#101814" />
+        
+          </g>
           <rect
             className="cab-screen-backdrop"
             x="109"
             y="293"
-            width="274"
-            height="157"
+            width="0"
+            height="0"
             fill="#101814"
+            
           />
+          <defs>
+  <clipPath id="adScreenClip">
+    <rect
+      x="0"
+      y="0"
+      width="274"
+      height="157"
+      rx="12"
+      ry="12"
+    />
+  </clipPath>
+</defs>
           <svg
-            x="109"
-            y="294"
-            width="274"
-            height="132"
-            viewBox="0 0 185 132"
+            x="102"
+            y="230"
+            width="330"
+            height="295"
+            viewBox="0 0 320 165"
             preserveAspectRatio="xMidYMid meet"
             overflow="hidden"
+            transform="rotate(1 277.5 380)"
             aria-hidden="true"
           >
-            <rect width="185" height="132" fill="#ffd21c" />
+            <g clipPath="url(#adScreenClip)"> 
+            <rect width="330" height="295" fill="#101814" />
             <g className="cab-ad-slide cab-ad-first">
-              <rect width="185" height="132" fill="#ffd21c" />
+              <rect width="330" height="295" fill="#ffd21c" />
               <circle
                 className="cab-ad-orbit"
                 cx="167"
@@ -177,7 +195,7 @@ export function Home() {
               </text>
             </g>
             <g className="cab-ad-slide cab-ad-second">
-              <rect width="185" height="132" fill="#087a45" />
+              <rect width="274" height="157" fill="#087a45" />
               <path
                 className="cab-ad-route"
                 d="M-15 114C57 64 96 150 200 70"
@@ -196,11 +214,11 @@ export function Home() {
                 possibility.
               </text>
               <text x="13" y="96" fill="white" fontSize="10">
-                Your next audience is on the move.
+                Ad on the move.
               </text>
             </g>
             <g className="cab-ad-slide cab-ad-third">
-              <rect width="185" height="132" fill="#101814" />
+              <rect width="274" height="157" fill="#101814" />
               <text x="13" y="20" className="cab-ad-eyebrow" fill="#ffd21c">
                 PICTURE YOUR BRAND HERE
               </text>
@@ -215,7 +233,7 @@ export function Home() {
               </text>
             </g>
             <g className="cab-ad-slide cab-ad-fourth">
-              <rect width="185" height="132" fill="#eaf3e8" />
+              <rect width="274" height="157" fill="#eaf3e8" />
               <circle
                 className="cab-ad-orbit"
                 cx="173"
@@ -243,7 +261,7 @@ export function Home() {
               </text>
             </g>
             <g className="cab-ad-slide cab-ad-fifth">
-              <rect width="185" height="132" fill="#ffd21c" />
+              <rect width="274" height="157" fill="#ffd21c" />
               <path
                 className="cab-ad-route"
                 d="M-10 116H195"
@@ -266,7 +284,7 @@ export function Home() {
               </text>
             </g>
             <g className="cab-ad-slide cab-ad-sixth">
-              <rect width="185" height="132" fill="#143c2a" />
+              <rect width="274" height="157" fill="#143c2a" />
               <text x="13" y="20" className="cab-ad-eyebrow" fill="#ffd21c">
                 YOUR NEXT CHAPTER
               </text>
@@ -294,6 +312,7 @@ export function Home() {
                 Imagine the possibilities.
               </text>
             </g>
+            </g>
           </svg>
         </svg>
         <div className="cab-ad-controls">
@@ -303,18 +322,19 @@ export function Home() {
           <div className="landing-copy scroll-reveal">
             <p className="landing-kicker">Cab advertising in Hyderabad</p>
             <h1>
-              Your brand,
+              Ads on the
               <br />
-              <em>along for the ride.</em>
+              <em>move</em>
             </h1>
             <p className="landing-intro">
-              Adrover helps brands meet people where their day is already
-              moving: on passenger-facing screens inside Hyderabad cabs and
-              buses.
+              AdRover helps your business connect with people while they move
+              around the city. We broadcast your digital ads on screens inside
+              moving cabs, turning daily commutes into active branding
+              opportunities.
             </p>
             <div className="landing-actions">
               <a className="button yellow" href="#upload">
-                Start your campaign
+                Start Campaign
               </a>
               <a className="landing-text-link" href="#upload">
                 See how it works{" "}
@@ -343,7 +363,7 @@ export function Home() {
           <div>
             <LandingIcon kind="pin" />
             <span>
-              <strong>Your brand, in motion</strong>
+              <strong>Ad on the move.</strong>
               <small>Local stories, everyday rides</small>
             </span>
           </div>
@@ -354,10 +374,10 @@ export function Home() {
         <div className="wrap">
           <div className="landing-section-heading scroll-reveal">
             <p className="landing-kicker">A simple way to get moving</p>
-            <h2>Bring your video to the journey.</h2>
+            <h2>Get your ad on the move.</h2>
             <p>
-              A clear, guided path from your first idea to a campaign that is
-              ready for the road.
+              Three easy steps to launch your digital ads in front of daily
+              commuters.
             </p>
           </div>
           <div className="journey-toolbar">
@@ -384,7 +404,7 @@ export function Home() {
                     aria-hidden="true"
                   >
                     <div className="journey-mini-screen">
-                      <span>adrover.</span>
+                      <span>AdRover</span>
                       <strong>{step.preview}</strong>
                       {step.icon === "upload" && (
                         <span className="journey-play">▶</span>
@@ -397,7 +417,7 @@ export function Home() {
                       {step.icon === "reach" && (
                         <div className="journey-road">
                           <span className="journey-cab">
-                            adrover.
+                            AdRover
                             <i />
                             <i />
                           </span>
@@ -405,7 +425,7 @@ export function Home() {
                       )}
                     </div>
                     <span className="journey-scene-label">
-                      Concept preview · {step.number}/03
+                      Step illustration · {step.number}/03
                     </span>
                   </div>
                   <p>{step.guidance}</p>
@@ -431,8 +451,9 @@ export function Home() {
             </a>
           </div>
           <p className="upload-disclaimer">
-            No campaign setup or video is needed to ask a question. Share your
-            query and contact details on our Contact us page.
+            The illustrations above are not screen recordings. This website
+            preview does not accept payments or confirm campaign bookings.
+            Contact us to discuss your campaign.
           </p>
           <div
             className="service-strip"
@@ -455,7 +476,10 @@ export function Home() {
               <LandingIcon kind="pin" />
               <span>Hyderabad focused</span>
             </div>
-            <p>Your brand on the move.</p>
+            <p>
+              Turn each ride into a high-impact branding opportunity for your
+              business.
+            </p>
           </div>
         </div>
       </section>

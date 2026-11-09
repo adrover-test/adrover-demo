@@ -58,9 +58,7 @@ export function AdPageEntrance() {
         </g>
       </svg>
       <div>
-        <strong>
-          Adrover<span>.</span>
-        </strong>
+        <strong>AdRover</strong>
         <small>Brands on the move</small>
       </div>
     </div>

@@ -6,9 +6,10 @@ import {
   saveAdvertisement,
 } from "../lib/portal";
 import {
-  calculateAds,
+  calculate,
   campaignDescription,
   moneyFormat,
+  numberFormat,
 } from "../lib/campaign";
 import { CampaignPlanner, defaultCampaignSelection } from "./CampaignPlanner";
 
@@ -29,10 +30,11 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
   const [videoError, setVideoError] = useState("");
   const [step, setStep] = useState<Step>("creative");
   const [selection, setSelection] = useState(defaultCampaignSelection);
-  const calculation = calculateAds(
+  const calculation = calculate(
     selection.vehicles,
-    selection.ads,
-    selection.weeks,
+    selection.days,
+    selection.dailyPlays,
+    "Cabs",
   );
   const plan = calculation.ok ? calculation.estimate : null;
   const [adName, setAdName] = useState("");
@@ -724,7 +726,8 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                 </span>
                 <h2>Choose your campaign plan</h2>
                 <p>
-                  Select cabs, total ads and duration to estimate your price.
+                  Select your cabs, campaign days and plays per cab per day to
+                  estimate your budget.
                 </p>
               </div>
               <CampaignPlanner
@@ -847,44 +850,46 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
             {bannerUrl ? (
               <img src={bannerUrl} alt="" />
             ) : (
-              <span aria-hidden="true">
-                adrover<span>.</span>
-              </span>
+              <span aria-hidden="true">AdRover</span>
             )}
           </div>
           <div className="registration-summary-details">
             <div>
-              <label htmlFor="summary-ads">Total ads</label>
+              <span>Estimated plays</span>
+              <strong id="summary-plays">
+                {plan ? numberFormat.format(plan.plays) : "—"}
+              </strong>
+            </div>
+            <div>
+              <label htmlFor="summary-days">Campaign days</label>
               <input
-                id="summary-ads"
+                id="summary-days"
                 type="number"
-                min="1000"
+                min="1"
                 step="1"
-                value={selection.ads}
+                value={selection.days}
                 onChange={(event) =>
-                  setSelection({ ...selection, ads: event.target.value })
+                  setSelection({ ...selection, days: event.target.value })
                 }
                 aria-describedby="summary-pricing-note summary-pricing-error"
               />
             </div>
             <div>
-              <label htmlFor="summary-weeks">Duration</label>
-              <select
-                id="summary-weeks"
-                value={selection.weeks}
+              <label htmlFor="summary-daily-plays">Plays per cab per day</label>
+              <input
+                id="summary-daily-plays"
+                type="number"
+                min="1"
+                step="1"
+                value={selection.dailyPlays}
                 onChange={(event) =>
                   setSelection({
                     ...selection,
-                    weeks: Number(event.target.value),
+                    dailyPlays: event.target.value,
                   })
                 }
-              >
-                {[1, 2, 3].map((weeks) => (
-                  <option key={weeks} value={weeks}>
-                    {weeks} {weeks === 1 ? "week" : "weeks"} ({weeks * 7} days)
-                  </option>
-                ))}
-              </select>
+                aria-describedby="summary-pricing-note summary-pricing-error"
+              />
             </div>
             <div>
               <label htmlFor="summary-cabs">Requested cabs</label>
@@ -916,8 +921,9 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
             {!calculation.ok && calculation.error}
           </p>
           <p id="summary-pricing-note">
-            Minimum 1,000 ads. Total ads × ₹0.30 across all cabs and weeks;
-            taxes extra.
+            Estimated plays = cabs × days × plays per cab per day. Each play is
+            30 seconds at ₹0.30. Taxes and final placement details apply at
+            checkout.
           </p>
           <div className="registration-summary-status">
             <span aria-hidden="true" />

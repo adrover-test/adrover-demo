@@ -15,12 +15,18 @@ export function Pricing() {
 
   return (
     <>
-      <section className="campaign-heading wrap">
-        <h1>Plan your campaign</h1>
-        <p>Preview your video and estimate your budget. No payment required.</p>
-      </section>
-      <CampaignPlanner />
-      <VideoPreview />
+      <div className="pricing-page">
+        <section className="campaign-heading wrap">
+          <span className="eyebrow">CAB SCREEN ADVERTISING · HYDERABAD</span>
+          <h1>Plan your campaign</h1>
+          <p>
+            Choose your cabs, campaign duration and plays per cab per day. See
+            your estimated reach and budget instantly.
+          </p>
+        </section>
+        <CampaignPlanner />
+        <VideoPreview />
+      </div>
       <section
         className="wrap section tight"
         aria-labelledby="pricing-note-title"
@@ -28,9 +34,11 @@ export function Pricing() {
         <div className="callout">
           <h3 id="pricing-note-title">Before you book</h3>
           <p>
-            Prices are illustrative. Confirm availability, taxes and creative
-            requirements before booking. Select your video again on Register;
-            preview files are not transferred between pages.
+            Assumes ₹0.30 per 30-second play. Taxes and final placement details
+            apply at checkout. This website preview does not accept payments or
+            confirm bookings. Confirm availability and creative requirements
+            before booking. Select your video again on Register; preview files
+            are not transferred between pages.
           </p>
           <a className="button" href="register.html">
             Register your ad

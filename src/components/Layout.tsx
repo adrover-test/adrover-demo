@@ -14,14 +14,12 @@ const navigation = [
 
 function Logo() {
   return (
-    <a className="logo" href="index.html" aria-label="Adrover home">
+    <a className="logo" href="index.html" aria-label="AdRover home">
       <svg viewBox="0 0 40 40" aria-hidden="true">
         <path d="M0 37 14 2h12l14 35H28L20 14 12 37Z" fill="#ffd21c" />
         <path d="M18 25h4l3 8H15Z" fill="#101814" />
       </svg>
-      <span>
-        adrover<i>.</i>
-      </span>
+      <span>AdRover</span>
     </a>
   );
 }
@@ -55,7 +53,9 @@ export function Layout({
     <a
       key={href}
       className={
-        href === "login.html" ? "button ghost small nav-login-button" : undefined
+        href === "login.html"
+          ? "button ghost small nav-login-button"
+          : undefined
       }
       href={href}
       aria-current={currentPage === href ? "page" : undefined}

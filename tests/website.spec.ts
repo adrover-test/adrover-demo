@@ -57,7 +57,7 @@ for (const slug of pages) {
     }
     await expect(page.locator("main h1")).toHaveCount(1);
     await expect(page).toHaveTitle(/Adrover/);
-    await expect(page.locator("header .logo")).toHaveText("adrover.");
+    await expect(page.locator("header .logo")).toHaveText("AdRover");
     await expect(page.locator("header .logo > span")).toHaveCSS(
       "text-transform",
       "capitalize",
@@ -154,7 +154,7 @@ test("home presents the requested scroll sequence and footer anchors", async ({
   );
   await expect(page.locator(".step-icon svg")).toHaveCount(3);
   await expect(page.locator("#services")).toContainText("Cab screen ads");
-  await expect(page.locator("#upload")).toContainText("Upload your video");
+  await expect(page.locator("#upload")).toContainText("Upload your digital ad");
   await expect(page.locator("#testimonials .testimonial")).toHaveCount(3);
   await expect(page.locator("#testimonials")).toHaveCSS(
     "background-color",
@@ -201,7 +201,7 @@ test("home presents the requested scroll sequence and footer anchors", async ({
     "A sample look at feedback",
   );
   await expect(page.locator("#upload")).toContainText(
-    "No campaign setup or video is needed",
+    "This website preview does not accept payments",
   );
   const steps = await page.locator(".upload-step").evaluateAll((nodes) =>
     nodes.map((node) => {
@@ -218,7 +218,7 @@ test("home presents the requested scroll sequence and footer anchors", async ({
     expect(steps[0].y).toBeLessThan(steps[1].y);
     expect(steps[1].y).toBeLessThan(steps[2].y);
   }
-  await page.getByRole("link", { name: "Start your campaign" }).click();
+  await page.getByRole("link", { name: "Start Campaign" }).click();
   await expect(page.locator("#upload")).toBeInViewport();
   for (const selector of [
     "#upload .landing-section-heading",
@@ -377,52 +377,73 @@ test("calculator validates inputs and hands campaign to contact under repository
   const videoBox = await page.locator("#video-preview").boundingBox();
   expect(plannerBox!.y + plannerBox!.height).toBeLessThanOrEqual(videoBox!.y);
   if (page.viewportSize()!.width > 800) {
-    expect(plannerBox!.height).toBeLessThan(450);
+    expect(plannerBox!.height).toBeLessThan(550);
   } else {
-    expect(plannerBox!.height).toBeLessThan(900);
+    expect(plannerBox!.height).toBeLessThan(1050);
   }
-  await expect(page.locator("#total-cost")).toHaveText("\u20b9300");
-  await expect(page.locator("#total-plays")).toHaveText("1,000");
+  await expect(page.locator("#total-cost")).toHaveText("\u20b93,000");
+  await expect(page.locator("#total-plays")).toHaveText("10,000");
+  await expect(page.locator("#daily-play-result")).toHaveText("50");
+  await expect(page.locator(".pricing-page")).toBeVisible();
+  await expect(page.locator(".pricing-page")).toContainText(
+    "Total estimated plays must be greater than 1,000",
+  );
+  await expect(page.locator("#plays-breakdown")).toHaveText(
+    "20 cabs × 10 days × 50 plays/day/cab = 10,000 estimated plays",
+  );
+  await page.locator("#vehicle-count").fill("1");
+  await page.locator("#campaign-days").fill("1");
+  await page.locator("#daily-play-count").fill("1000");
+  await expect(page.locator("#pricing-error")).toContainText(
+    "must be greater than 1,000",
+  );
+  await expect(page.locator("#continue-enquiry")).toBeDisabled();
+  await page.locator("#daily-play-count").fill("1001");
+  await expect(page.locator("#total-plays")).toHaveText("1,001");
+  await expect(page.locator("#continue-enquiry")).toBeEnabled();
+  await page.locator("#vehicle-count").fill("20");
+  await page.locator("#campaign-days").fill("10");
+  await page.locator("#daily-play-count").fill("50");
+  await expect(
+    page.locator(".fine").filter({ hasText: "Estimated plays" }),
+  ).toContainText("30-second ad at \u20b90.30 per play");
   for (const value of ["", "0", "-1", "1.5"]) {
     await page.locator("#vehicle-count").fill(value);
     await expect(page.locator("#pricing-error")).toBeVisible();
     await expect(page.locator("#total-cost")).toHaveText("—");
     await expect(page.locator("#continue-enquiry")).toBeDisabled();
   }
-  await page.locator("#vehicle-count").fill("12");
-  for (const value of ["", "999", "1000.5", "9007199254740991"]) {
-    await page.locator("#ad-count").fill(value);
+  await page.locator("#vehicle-count").fill("20");
+  for (const value of ["", "0", "-1", "1.5", "9007199254740991"]) {
+    await page.locator("#daily-play-count").fill(value);
     await expect(page.locator("#pricing-error")).toBeVisible();
     await expect(page.locator("#continue-enquiry")).toBeDisabled();
   }
-  await page.locator("#ad-count").fill("2500");
-  await page.getByRole("button", { name: "2 Weeks (14 days)" }).click();
-  await expect(
-    page.getByRole("button", { name: "2 Weeks (14 days)" }),
-  ).toHaveAttribute("aria-pressed", "true");
+  await page.locator("#daily-play-count").fill("50");
+  for (const value of ["", "0", "-1", "1.5"]) {
+    await page.locator("#campaign-days").fill(value);
+    await expect(page.locator("#pricing-error")).toBeVisible();
+    await expect(page.locator("#continue-enquiry")).toBeDisabled();
+  }
+  await page.locator("#vehicle-count").fill("12");
+  await page.locator("#daily-play-count").fill("2500");
+  await page.locator("#campaign-days").fill("14");
   await expect(page.locator("#pricing-result")).toContainText("12");
-  await expect(page.locator("#pricing-result")).toContainText(
-    "2 Weeks (14 days)",
-  );
-  await expect(page.locator("#total-plays")).toHaveText("2,500");
-  await expect(page.locator("#total-cost")).toHaveText("\u20b9750");
+  await expect(page.locator("#pricing-result")).toContainText("14 days");
+  await expect(page.locator("#total-plays")).toHaveText("4,20,000");
+  await expect(page.locator("#total-cost")).toHaveText("\u20b91,26,000");
   await page.locator("#continue-enquiry").click();
   await expect(page).toHaveURL(
-    /\/adrover-test\/contact\.html\?vehicles=12&ads=2500&weeks=2&type=Cabs/,
+    /\/adrover-test\/contact\.html\?vehicles=12&days=14&dailyPlays=2500&type=Cabs/,
   );
   await expect(page.locator("#incoming-campaign")).toContainText(
-    "12 cabs, 2 weeks (14 days)",
+    "12 cabs × 14 days × 2,500 plays per cab per day = 4,20,000 estimated",
   );
   await expect(page.locator("#preferred-format")).toHaveValue("Cabs");
-  await page.reload();
+  await expect(page.locator("#preferred-format option")).toHaveCount(1);
   await expect(page.locator("#incoming-campaign")).toContainText(
-    "2,500 total ads",
+    "\u20b91,26,000",
   );
-  await page.locator("#preferred-format").selectOption("Buses");
-  await expect(page.locator("#incoming-campaign")).toContainText(
-    "Updated format: Buses",
-  );
-  await expect(page.locator("#incoming-campaign")).toContainText("\u20b9750");
 });
 
 test("contact rejects malformed campaign links without blocking a new draft", async ({
@@ -430,7 +451,7 @@ test("contact rejects malformed campaign links without blocking a new draft", as
 }) => {
   for (const query of [
     "vehicles=1",
-    "vehicles=-1&days=10&dailyPlays=50&type=Both",
+    "vehicles=-1&days=10&dailyPlays=50&type=Cabs",
     "vehicles=1&days=1&dailyPlays=1&type=Train",
   ]) {
     await page.goto(`contact.html?${query}`);
@@ -438,7 +459,7 @@ test("contact rejects malformed campaign links without blocking a new draft", as
       "The campaign link could not be used",
     );
     await expect(page.locator("#incoming-campaign")).toBeHidden();
-    await expect(page.locator("#preferred-format")).toHaveValue("Both");
+    await expect(page.locator("#preferred-format")).toHaveValue("Cabs");
     await expect(page.locator("#enquiry-form")).toBeVisible();
   }
   await page.goto("contact.html");
@@ -446,7 +467,7 @@ test("contact rejects malformed campaign links without blocking a new draft", as
   await expect(page.locator("#incoming-campaign")).toBeHidden();
 });
 
-test("client login shows unavailable OTP delivery without granting access", async ({
+test("client login shows the demo OTP without sending a request or granting access before verification", async ({
   page,
 }) => {
   const submissions: string[] = [];
@@ -466,11 +487,18 @@ test("client login shows unavailable OTP delivery without granting access", asyn
     "one-time-code",
   );
   await page.locator("#login-phone").fill("+919876543210");
-  await page.getByRole("button", { name: /Request OTP/ }).click();
+  await page.getByRole("button", { name: /Generate demo OTP/ }).click();
   await expect(page).toHaveURL(/login\.html$/);
   await expect(page.locator(".login-status")).toContainText(
-    "No OTP has been generated or sent",
+    "Demo OTP: 123456",
   );
+  await expect(page.locator("#login-otp")).toBeEnabled();
+  await expect(
+    page.getByText("Demo sign-in; no SMS is sent", { exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("adrover-demo-session")),
+  ).toBeNull();
   expect(submissions).toEqual([]);
 });
 
@@ -859,7 +887,7 @@ test("enquiry validates required fields and saves only a local branded draft", a
   page.on("request", (request) => {
     if (request.method() !== "GET") submissions.push(request.url());
   });
-  await page.goto("contact.html?vehicles=20&ads=1000&weeks=1&type=Cabs");
+  await page.goto("contact.html?vehicles=20&days=10&dailyPlays=50&type=Cabs");
   await page.getByRole("button", { name: "Save My Enquiry Draft" }).click();
   expect(
     await page
@@ -875,7 +903,7 @@ test("enquiry validates required fields and saves only a local branded draft", a
     "not just spaces",
   );
   await page.locator("#contact-name").fill("Asha");
-  await page.locator("#preferred-format").selectOption("Buses");
+  await expect(page.locator("#preferred-format option")).toHaveCount(1);
   await page.locator("#campaign-message").fill("A local launch");
   const pending = page.waitForEvent("download");
   await page.getByRole("button", { name: "Save My Enquiry Draft" }).click();
@@ -884,9 +912,9 @@ test("enquiry validates required fields and saves only a local branded draft", a
   const text = await downloadedText(download);
   expect(text).toContain("ADROVER / CAMPAIGN ENQUIRY DRAFT");
   expect(text).toContain("Name: Asha");
-  expect(text).toContain("Interior screen format: Buses");
-  expect(text).toContain("1,000 total ads");
-  expect(text).toContain("₹300 at INR 0.30/ad");
+  expect(text).toContain("Interior screen format: Cabs");
+  expect(text).toContain("10,000 estimated 30-second plays");
+  expect(text).toContain("₹3,000 at ₹0.30 per play");
   expect(text).toContain("Nothing has been submitted or sent.");
   expect(text).not.toMatch(/\badrove\b/i);
   await expect(page.locator("#enquiry-status")).toContainText(

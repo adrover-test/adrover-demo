@@ -7,8 +7,7 @@ import { VehicleOptions } from "./VehicleOptions";
 export function EnquiryForm() {
   const [incoming] = useState(() => readCampaign(window.location.search));
   const estimate = incoming?.ok ? incoming.estimate : null;
-  const [format, setFormat] = useState<string>(estimate?.type ?? "Both");
-  const [formatChanged, setFormatChanged] = useState(false);
+  const format = estimate?.type ?? "Cabs";
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
@@ -90,9 +89,7 @@ export function EnquiryForm() {
       </p>
       <div id="incoming-campaign" className="summary-box" hidden={!estimate}>
         {estimate &&
-          (formatChanged
-            ? `Updated format: ${format}. Original illustrative plan: ${campaignDescription(estimate)} Final format pricing requires confirmation.`
-            : `From your illustrative estimate: ${campaignDescription(estimate)} Format: ${format}. Not a quote.`)}
+          `From your illustrative estimate: ${campaignDescription(estimate)} Format: ${format}. Not a quote.`}
       </div>
       <p
         id="incoming-error"
@@ -162,15 +159,7 @@ export function EnquiryForm() {
         </div>
         <div className="field">
           <label htmlFor="preferred-format">Preferred screen format</label>
-          <select
-            id="preferred-format"
-            name="format"
-            value={format}
-            onChange={(event) => {
-              setFormat(event.target.value);
-              setFormatChanged(true);
-            }}
-          >
+          <select id="preferred-format" name="format" defaultValue={format}>
             <VehicleOptions />
           </select>
         </div>

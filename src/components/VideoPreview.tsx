@@ -119,6 +119,15 @@ export function VideoPreview({
             width="504"
             height="683"
           />
+          <svg
+            className="video-cab-branding"
+            viewBox="0 184 504 315"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <rect x="131" y="450" width="111" height="12" fill="#101814" />
+          </svg>
           <div className="video-screen">
             {url ? (
               <video
@@ -158,7 +167,7 @@ export function VideoPreview({
               />
             ) : (
               <div className="video-screen-empty">
-                <span>adrover.</span>
+                <span>AdRover</span>
                 <strong>
                   Your story
                   <br />

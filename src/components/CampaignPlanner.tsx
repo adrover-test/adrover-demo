@@ -1,5 +1,5 @@
 import {
-  calculateAds,
+  calculate,
   campaignQuery,
   isPositiveInteger,
   moneyFormat,
@@ -9,13 +9,13 @@ import { useState } from "react";
 
 export type CampaignSelection = {
   vehicles: string;
-  ads: string;
-  weeks: number;
+  days: string;
+  dailyPlays: string;
 };
 export const defaultCampaignSelection: CampaignSelection = {
   vehicles: "20",
-  ads: "1000",
-  weeks: 1,
+  days: "10",
+  dailyPlays: "50",
 };
 
 export function CampaignPlanner({
@@ -30,18 +30,17 @@ export function CampaignPlanner({
   const [localSelection, setLocalSelection] = useState(
     defaultCampaignSelection,
   );
-  const { vehicles, ads, weeks } = selection ?? localSelection;
+  const { vehicles, days, dailyPlays } = selection ?? localSelection;
   function update(change: Partial<CampaignSelection>) {
-    const next = { vehicles, ads, weeks, ...change };
+    const next = { vehicles, days, dailyPlays, ...change };
     if (onSelectionChange) onSelectionChange(next);
     else setLocalSelection(next);
   }
   const setVehicles = (vehicles: string) => update({ vehicles });
-  const setAds = (ads: string) => update({ ads });
-  const setWeeks = (weeks: number) => update({ weeks });
-  const result = calculateAds(vehicles, ads, weeks);
+  const setDays = (days: string) => update({ days });
+  const setDailyPlays = (dailyPlays: string) => update({ dailyPlays });
+  const result = calculate(vehicles, days, dailyPlays, "Cabs");
   const estimate = result.ok ? result.estimate : null;
-  const duration = `${weeks} ${weeks === 1 ? "Week" : "Weeks"} (${weeks * 7} days)`;
 
   return (
     <section
@@ -93,8 +92,8 @@ export function CampaignPlanner({
             />
           </svg>
           <div>
-            <span>Per ad only</span>
-            <strong>₹0.30!</strong>
+            <span>Per 30-second play</span>
+            <strong>₹0.30</strong>
           </div>
         </div>
         <p className="cab-header-tagline">
@@ -155,19 +154,25 @@ export function CampaignPlanner({
                 </svg>
               </span>
               <div>
-                <label htmlFor="ad-count">Number of Ads</label>
-                <p id="ads-guidance">Minimum 1,000 ads (enter 1,000 or more)</p>
+                <label htmlFor="daily-play-count">Plays per Cab per Day</label>
+                <p id="plays-guidance">Each play is a 30-second ad.</p>
               </div>
             </div>
             <input
-              id="ad-count"
+              id="daily-play-count"
               type="number"
-              min="1000"
+              min="1"
               step="1"
-              value={ads}
-              onChange={(event) => setAds(event.target.value)}
-              aria-invalid={!isPositiveInteger(ads) || Number(ads) < 1000}
-              aria-describedby="ads-guidance pricing-error"
+              value={dailyPlays}
+              onChange={(event) => setDailyPlays(event.target.value)}
+              aria-invalid={
+                !isPositiveInteger(dailyPlays) ||
+                (!result.ok &&
+                  isPositiveInteger(vehicles) &&
+                  isPositiveInteger(days) &&
+                  isPositiveInteger(dailyPlays))
+              }
+              aria-describedby="plays-guidance pricing-error"
             />
           </div>
           <div className="cab-duration-row">
@@ -184,36 +189,22 @@ export function CampaignPlanner({
                 </svg>
               </span>
               <div>
-                <span id="duration-label" className="cab-duration-label">
-                  Campaign Duration (Weeks)
-                </span>
+                <label htmlFor="campaign-days">Campaign Duration (Days)</label>
                 <p id="duration-guidance">
-                  Select how long you want to run the campaign (minimum 7 days /
-                  1 week).
+                  Choose the number of campaign days.
                 </p>
               </div>
             </div>
-            <div
-              role="group"
-              aria-labelledby="duration-label"
-              aria-describedby="duration-guidance"
-            >
-              <div className="cab-week-options">
-                {[1, 2, 3].map((week) => (
-                  <button
-                    key={week}
-                    type="button"
-                    aria-pressed={weeks === week}
-                    onClick={() => setWeeks(week)}
-                  >
-                    <strong>
-                      {week} {week === 1 ? "Week" : "Weeks"}
-                    </strong>
-                    <span>({week * 7} days)</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+            <input
+              id="campaign-days"
+              type="number"
+              min="1"
+              step="1"
+              value={days}
+              onChange={(event) => setDays(event.target.value)}
+              aria-invalid={!isPositiveInteger(days)}
+              aria-describedby="duration-guidance pricing-error"
+            />
           </div>
           <p
             id="pricing-error"
@@ -242,23 +233,40 @@ export function CampaignPlanner({
                 </dd>
               </div>
               <div>
-                <dt>Number of Ads</dt>
-                <dd id="total-plays">
-                  {isPositiveInteger(ads)
-                    ? numberFormat.format(Number(ads))
+                <dt>Plays per Cab per Day</dt>
+                <dd id="daily-play-result">
+                  {estimate ? numberFormat.format(Number(dailyPlays)) : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt>Campaign duration</dt>
+                <dd>
+                  {isPositiveInteger(days)
+                    ? `${numberFormat.format(Number(days))} days`
                     : "—"}
                 </dd>
               </div>
               <div>
-                <dt>Duration</dt>
-                <dd>{duration}</dd>
+                <dt>Total Estimated Plays</dt>
+                <dd id="total-plays">
+                  {estimate ? numberFormat.format(estimate.plays) : "—"}
+                </dd>
               </div>
             </dl>
+            {estimate && (
+              <p className="cab-play-breakdown" id="plays-breakdown">
+                {numberFormat.format(estimate.vehicles)} cabs ×{" "}
+                {numberFormat.format(estimate.days)} days ×{" "}
+                {numberFormat.format(estimate.dailyPlays)} plays/day/cab ={" "}
+                {numberFormat.format(estimate.plays)} estimated plays
+              </p>
+            )}
             <div className="cab-total">
               <h4>Estimated total</h4>
               <strong id="total-cost">
                 {estimate ? moneyFormat.format(estimate.cost) : "—"}
               </strong>
+              <p>₹0.30 per 30-second play</p>
             </div>
           </div>
           {!embedded && (
@@ -280,8 +288,9 @@ export function CampaignPlanner({
         </aside>
       </div>
       <p className="fine">
-        Total ads × ₹0.30, across all cabs and weeks. Minimum 7 days. Pricing
-        and availability need confirmation; taxes extra.
+        Estimated plays = cabs × days × plays per cab per day. Each play is a
+        30-second ad at ₹0.30 per play. Taxes and final placement details apply
+        at checkout. Total estimated plays must be greater than 1,000.
       </p>
     </section>
   );

@@ -40,6 +40,56 @@ test("admin access is separate from advertiser access and logout clears only adm
   await expect(page.locator("main h1")).toHaveText("Welcome back, Advertiser");
 });
 
+test("admin ad detail filters sample in-car playback locations by date", async ({
+  page,
+}) => {
+  await signInAdmin(page, "admin.html?section=ad&id=apollo-checkup");
+  await expect(
+    page.getByRole("heading", { name: "Car playback locations" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/not live GPS or verified playback telemetry/i),
+  ).toBeVisible();
+
+  const dateFilter = page.getByLabel("Filter by date");
+  const today = await dateFilter.inputValue();
+  const selectedDate = new Date(`${today}T12:00:00`);
+  selectedDate.setDate(selectedDate.getDate() - 1);
+  const yesterday = [
+    selectedDate.getFullYear(),
+    String(selectedDate.getMonth() + 1).padStart(2, "0"),
+    String(selectedDate.getDate()).padStart(2, "0"),
+  ].join("-");
+
+  await expect(page.locator("#ad-location-records tr")).toHaveCount(100);
+  await expect(page.locator(".admin-location-marker")).toHaveCount(100);
+  await expect(page.locator("#ad-location-records")).toContainText(
+    "Hitec City",
+  );
+  const secondMarker = page.locator(".admin-location-marker").nth(1);
+  const secondVehicle = await secondMarker.getAttribute("data-vehicle");
+  await secondMarker.click();
+  await expect(page.locator(".admin-location-selected")).toContainText(
+    secondVehicle ?? "",
+  );
+  await expect(page.locator(".admin-location-row-selected")).toContainText(
+    secondVehicle ?? "",
+  );
+  const firstMarker = page.locator(".admin-location-marker").first();
+  const todayX = await firstMarker.getAttribute("data-x");
+  const todayY = await firstMarker.getAttribute("data-y");
+  await dateFilter.fill(yesterday);
+  await expect(page.locator(".admin-location-count")).toContainText(
+    "100 campaign cabs",
+  );
+  await expect(page.locator("#ad-location-records tr")).toHaveCount(100);
+  await expect(firstMarker).not.toHaveAttribute("data-x", todayX ?? "");
+  await expect(firstMarker).not.toHaveAttribute("data-y", todayY ?? "");
+  await expect(page.locator("#ad-location-records")).toContainText(
+    "Gachibowli",
+  );
+});
+
 test("admin client views, enquiry search and driver directory work on small screens", async ({
   page,
 }) => {
