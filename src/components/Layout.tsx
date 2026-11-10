@@ -3,6 +3,7 @@ import { endDemoSession } from "../lib/portal";
 import { endAdminSession } from "../lib/admin";
 import { AdPageEntrance } from "./AdPageEntrance";
 import { CabCursor } from "./CabCursor";
+import { HomeAssistant } from "./HomeAssistant";
 
 const navigation = [
   ["index.html", "Home"],
@@ -122,6 +123,7 @@ export function Layout({
         </header>
       )}
       <main id="main">{children}</main>
+      {!isPortal && currentPage !== "admin-login.html" && <HomeAssistant />}
       <footer className={isLanding ? "landing-footer" : undefined}>
         <div className="wrap">
           <div
