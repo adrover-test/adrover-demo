@@ -26,6 +26,8 @@ npm run preview
 ```
 
 The production output is `dist`. The preview URL is normally `http://127.0.0.1:4173`.
+The nonproduction Azure App Service workflow deploys the contents of `dist`, not
+the source HTML or TypeScript.
 
 ## Pages and source
 
