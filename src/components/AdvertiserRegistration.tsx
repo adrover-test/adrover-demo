@@ -6,14 +6,20 @@ import {
   saveAdvertisement,
 } from "../lib/portal";
 import {
+  cabCountOptions,
   calculate,
   campaignDescription,
+  isSupportedCabCount,
+  minimumCampaignDays,
+  minimumDailyPlays,
   moneyFormat,
   numberFormat,
 } from "../lib/campaign";
+import { payWithRazorpay, razorpayConfigured } from "../lib/razorpay";
+import { saveAdVideo } from "../lib/adVideos";
 import { CampaignPlanner, defaultCampaignSelection } from "./CampaignPlanner";
 
-type Step = "creative" | "client" | "verify" | "plan" | "review";
+type Step = "creative" | "client" | "verify" | "plan" | "review" | "payment";
 
 const previewOtp = "123456";
 const steps: { id: Step; label: string }[] = [
@@ -22,6 +28,7 @@ const steps: { id: Step; label: string }[] = [
   { id: "verify", label: "Verify" },
   { id: "plan", label: "Plan" },
   { id: "review", label: "Review" },
+  { id: "payment", label: "Payment" },
 ];
 
 export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
@@ -56,6 +63,8 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [paymentId, setPaymentId] = useState("");
 
   useEffect(() => {
     if (!videoFile) {
@@ -145,28 +154,70 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
     setError("");
   }
 
-  function register(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function validateRegistration(): boolean {
     if (!plan) {
       setError("Select a valid campaign plan before registering.");
       setStep("plan");
-      return;
+      return false;
     }
     if (!videoFile || !videoDetails || videoError) {
       setError("Choose a playable video before registering.");
       setStep("creative");
-      return;
+      return false;
     }
     if (!emailVerified || !phoneVerified) {
       setError("Complete both preview contact checks before registering.");
-      return;
+      return false;
     }
     if (!consent) {
       setError(
-        "Confirm that you understand this is a local preview registration.",
+        "Confirm that you understand the preview limits and refund terms.",
       );
-      return;
+      return false;
     }
+    return true;
+  }
+
+  function goToPayment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!validateRegistration()) return;
+    setError("");
+    setStep("payment");
+  }
+
+  async function pay() {
+    if (!plan || paying || !validateRegistration()) return;
+    setError("");
+    setPaying(true);
+    try {
+      const result = await payWithRazorpay({
+        amountInr: plan.cost,
+        description: `Adrover campaign: ${adName.trim()}`,
+        customer: {
+          name: client.name,
+          email: client.email,
+          contact: client.phone,
+        },
+        reference: adName.trim(),
+      });
+      if (result.status === "cancelled") {
+        setError("Payment was cancelled. You have not been charged.");
+        return;
+      }
+      completeRegistration(result.paymentId);
+    } catch (paymentError) {
+      setError(
+        paymentError instanceof Error
+          ? paymentError.message
+          : "The payment could not be completed.",
+      );
+    } finally {
+      setPaying(false);
+    }
+  }
+
+  function completeRegistration(razorpayPaymentId: string) {
+    if (!plan || !videoFile) return;
     const today = new Date();
     const advertisement: Advertisement = {
       id: crypto.randomUUID(),
@@ -190,7 +241,12 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
       totalDays: plan.days,
       cabs: 0,
       fleet: "Fleet allocation pending review",
-      note: `Campaign plan: ${campaignDescription(plan)} Requested cabs: ${plan.vehicles}. Video: ${videoFile.name} (${videoDetails}). Banner: ${banner?.name ?? "Not provided"}. No files were uploaded; price and availability require confirmation.`,
+      note: `Campaign plan: ${campaignDescription(plan)} Requested cabs: ${plan.vehicles}. Video: ${videoFile.name} (${videoDetails}). Banner: ${banner?.name ?? "Not provided"}. Payment ${razorpayPaymentId} received; refunded if there is an issue with the ad video or content.`,
+      payment: {
+        id: razorpayPaymentId,
+        amount: plan.cost,
+        paidAt: today.toISOString(),
+      },
     };
     try {
       startDemoSession(client.email);
@@ -203,7 +259,9 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
         advertiserType: "Business",
       });
       saveAdvertisement(advertisement);
+      void saveAdVideo(advertisement.id, videoFile).catch(() => undefined);
       setError("");
+      setPaymentId(razorpayPaymentId);
       setSuccess(true);
     } catch (saveError) {
       setError(
@@ -726,8 +784,8 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                 </span>
                 <h2>Choose your campaign plan</h2>
                 <p>
-                  Select your cabs, campaign days and plays per cab per day to
-                  estimate your budget.
+                  Choose your cab count, daily plays and campaign duration to
+                  estimate your budget. Cab count does not affect the price.
                 </p>
               </div>
               <CampaignPlanner
@@ -759,7 +817,7 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
             </div>
           )}
           {step === "review" && (
-            <form className="registration-form" onSubmit={register}>
+            <form className="registration-form" onSubmit={goToPayment}>
               <div className="registration-step-heading">
                 <span className="registration-step-kicker">
                   05 / FINAL REVIEW
@@ -820,9 +878,10 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                   onChange={(event) => setConsent(event.target.checked)}
                 />
                 <span>
-                  I understand this is a browser-local preview. Files are not
-                  uploaded, OTP is not genuinely verified, and the displayed
-                  amount is not a quote or charge.
+                  I understand this is a browser-local preview: files are not
+                  uploaded and OTP is not genuinely verified. I agree to pay
+                  the plan amount, which is refunded if there is an issue with
+                  the ad video or content.
                 </span>
               </label>
               <p className="error registration-error" role="alert">
@@ -837,10 +896,62 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                   Back
                 </button>
                 <button className="button yellow" type="submit">
-                  Submit for review
+                  Continue to payment
                 </button>
               </div>
             </form>
+          )}
+          {step === "payment" && (
+            <div className="registration-form">
+              <div className="registration-step-heading">
+                <span className="registration-step-kicker">06 / PAYMENT</span>
+                <h2>Pay for your campaign</h2>
+                <p>
+                  Complete the payment securely with Razorpay. Your ad is
+                  submitted for review once the payment succeeds.
+                </p>
+              </div>
+              <div className="registration-payment-amount">
+                <span>Amount payable</span>
+                <strong>{plan ? moneyFormat.format(plan.cost) : "—"}</strong>
+                <small>{plan ? campaignDescription(plan) : ""}</small>
+              </div>
+              <p className="registration-payment-refund">
+                If there is any issue with your ad video or content, your
+                payment will be refunded.
+              </p>
+              {!razorpayConfigured && (
+                <p className="registration-payment-refund">
+                  Demo mode: no Razorpay key is set, so a dummy payment is
+                  simulated. No money is charged.
+                </p>
+              )}
+              <p className="error registration-error" role="alert">
+                {error}
+              </p>
+              <div className="registration-actions">
+                <button
+                  className="button ghost"
+                  type="button"
+                  onClick={() => setStep("review")}
+                  disabled={paying}
+                >
+                  Back
+                </button>
+                <button
+                  className="button yellow"
+                  type="button"
+                  onClick={pay}
+                  disabled={paying || !plan}
+                >
+                  {paying
+                    ? razorpayConfigured
+                      ? "Opening Razorpay…"
+                      : "Processing demo payment…"
+                    : `Pay ${plan ? moneyFormat.format(plan.cost) : ""}${razorpayConfigured ? " with Razorpay" : " (demo)"}`}
+                </button>
+              </div>
+            </div>
           )}
         </main>
         <aside className="dashboard-panel registration-sidebar">
@@ -861,11 +972,11 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
               </strong>
             </div>
             <div>
-              <label htmlFor="summary-days">Campaign days</label>
+              <label htmlFor="summary-days">Campaign days (minimum 7)</label>
               <input
                 id="summary-days"
                 type="number"
-                min="1"
+                min={minimumCampaignDays}
                 step="1"
                 value={selection.days}
                 onChange={(event) =>
@@ -875,11 +986,13 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
               />
             </div>
             <div>
-              <label htmlFor="summary-daily-plays">Plays per cab per day</label>
+              <label htmlFor="summary-daily-plays">
+                Plays per day (minimum 1,000)
+              </label>
               <input
                 id="summary-daily-plays"
                 type="number"
-                min="1"
+                min={minimumDailyPlays}
                 step="1"
                 value={selection.dailyPlays}
                 onChange={(event) =>
@@ -893,17 +1006,21 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
             </div>
             <div>
               <label htmlFor="summary-cabs">Requested cabs</label>
-              <input
+              <select
                 id="summary-cabs"
-                type="number"
-                min="1"
-                step="1"
                 value={selection.vehicles}
                 onChange={(event) =>
                   setSelection({ ...selection, vehicles: event.target.value })
                 }
                 aria-describedby="summary-pricing-error"
-              />
+                aria-invalid={!isSupportedCabCount(selection.vehicles)}
+              >
+                {cabCountOptions.map((count) => (
+                  <option key={count} value={count}>
+                    {count}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="registration-summary-total">
               <span>Plan amount</span>
@@ -921,15 +1038,15 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
             {!calculation.ok && calculation.error}
           </p>
           <p id="summary-pricing-note">
-            Estimated plays = cabs × days × plays per cab per day. Each play is
-            30 seconds at ₹0.30. Taxes and final placement details apply at
-            checkout.
+            Estimated plays = plays per day × campaign days; cab count does not
+            affect the estimate. Each play is 30 seconds at ₹0.30. Minimums are
+            1,000 plays per day and 7 days.
           </p>
           <div className="registration-summary-status">
             <span aria-hidden="true" />
             Preview · Pending approval
           </div>
-          <p>Nothing is uploaded or charged during this preview.</p>
+          <p>Files are not uploaded. Payment is taken via Razorpay.</p>
         </aside>
       </div>
       {success && (
@@ -943,13 +1060,14 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
             <span className="registration-success-icon" aria-hidden="true">
               ✓
             </span>
-            <span className="eyebrow">LOCAL REGISTRATION COMPLETE</span>
+            <span className="eyebrow">PAYMENT DONE</span>
             <h2 id="registration-success-title">
-              Your ad is in the approval queue
+              Payment received. Your ad has been submitted for review
             </h2>
             <p>
-              {adName} has been added to this browser’s advertiser workspace for
-              review. No files or messages were sent.
+              {adName} is in the approval queue. Payment ID: {paymentId}. If
+              there is any issue with your ad video or content, your payment
+              will be refunded.
             </p>
             <div className="registration-success-plan">
               {plan && campaignDescription(plan)} illustrative

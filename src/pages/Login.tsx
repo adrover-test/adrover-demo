@@ -25,7 +25,7 @@ export function Login() {
       return;
     }
 
-    const identity = `phone-${phone.replace(/\D/g, "")}@demo.adrover.local`;
+    const identity = `phone-91${phone}@demo.adrover.local`;
     startDemoSession(identity);
     window.location.assign(getDemoRedirect(window.location.search));
   }
@@ -59,28 +59,30 @@ export function Login() {
           <form className="login-form" onSubmit={handleSubmit}>
             <div className="field">
               <label htmlFor="login-phone">Phone number</label>
-              <input
-                autoComplete="tel"
-                id="login-phone"
-                name="phone"
-                type="tel"
-                inputMode="tel"
-                placeholder="+91 9876543210"
-                pattern="\+[1-9][0-9]{7,14}"
-                maxLength={16}
-                value={phone}
-                onChange={(event) => {
-                  setPhone(event.target.value);
-                  setOtp("");
-                  setOtpRequested(false);
-                  setError("");
-                }}
-                aria-describedby="login-phone-guidance"
-                required
-              />
+              <div className="login-phone-input">
+                <span aria-hidden="true">+91</span>
+                <input
+                  autoComplete="tel-national"
+                  id="login-phone"
+                  name="phone"
+                  type="tel"
+                  inputMode="numeric"
+                  placeholder="9876543210"
+                  pattern="[0-9]{10}"
+                  maxLength={10}
+                  value={phone}
+                  onChange={(event) => {
+                    setPhone(event.target.value.replace(/\D/g, "").slice(0, 10));
+                    setOtp("");
+                    setOtpRequested(false);
+                    setError("");
+                  }}
+                  aria-describedby="login-phone-guidance"
+                  required
+                />
+              </div>
               <p className="fine" id="login-phone-guidance">
-                Include the country code, with no spaces (for example,
-                +919876543210).
+                Country code +91 is fixed. Enter your 10-digit phone number.
               </p>
             </div>
 

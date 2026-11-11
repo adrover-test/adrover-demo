@@ -53,10 +53,10 @@ export const PLAN_TIERS: PlanTier[] = [
   {
     id: "starter",
     title: "Starter Corridor",
-    plays: 10000,
+    plays: 7000,
     days: 7,
-    cabs: 15,
-    price: 1000,
+    cabs: 10,
+    price: 2100,
     badge: "Trial",
   },
   {
@@ -64,8 +64,8 @@ export const PLAN_TIERS: PlanTier[] = [
     title: "City Growth Pack",
     plays: 25000,
     days: 14,
-    cabs: 35,
-    price: 2500,
+    cabs: 20,
+    price: 7500,
     badge: "Popular",
   },
   {
@@ -73,8 +73,8 @@ export const PLAN_TIERS: PlanTier[] = [
     title: "Metro Dominance",
     plays: 60000,
     days: 30,
-    cabs: 80,
-    price: 6000,
+    cabs: 30,
+    price: 18000,
     badge: "Best Value",
   },
 ];

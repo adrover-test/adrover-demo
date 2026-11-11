@@ -20,8 +20,9 @@ export function Pricing() {
           <span className="eyebrow">CAB SCREEN ADVERTISING · HYDERABAD</span>
           <h1>Plan your campaign</h1>
           <p>
-            Choose your cabs, campaign duration and plays per cab per day. See
-            your estimated reach and budget instantly.
+            Choose 10, 20 or 30 cabs, daily plays and campaign duration.
+            Estimate your budget using plays per day × days; cab count does not
+            affect the price.
           </p>
         </section>
         <CampaignPlanner />

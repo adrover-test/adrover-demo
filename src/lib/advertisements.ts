@@ -18,6 +18,11 @@ export type Advertisement = {
   fleet: string;
   note: string;
   ownerEmail?: string;
+  payment?: {
+    id: string;
+    amount: number;
+    paidAt: string;
+  };
   approval?: {
     amount: number;
     plays: number;

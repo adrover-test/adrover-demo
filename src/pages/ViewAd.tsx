@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { PortalSidebar } from "../components/PortalSidebar";
+import { getAdVideo } from "../lib/adVideos";
 import { AdLocationHistory } from "../components/AdLocationHistory";
 import type { Advertisement } from "../lib/advertisements";
 import { moneyFormat, numberFormat } from "../lib/campaign";
@@ -15,6 +17,27 @@ export function ViewAd({
   advertisement,
 }: { admin?: boolean; advertisement?: Advertisement } = {}) {
   const ad = advertisement ?? getAdvertisement();
+  const adId = ad?.id;
+  const [videoUrl, setVideoUrl] = useState("");
+
+  useEffect(() => {
+    if (!adId) return;
+    let url = "";
+    let cancelled = false;
+    getAdVideo(adId)
+      .then((blob) => {
+        if (!blob || cancelled) return;
+        url = URL.createObjectURL(blob);
+        setVideoUrl(url);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+      setVideoUrl("");
+    };
+  }, [adId]);
+
   if (!ad) {
     return (
       <section className="wrap section view-ad-not-found">
@@ -239,22 +262,36 @@ export function ViewAd({
             <div className="dashboard-panel-heading">
               <div>
                 <h2>Creative preview</h2>
-                <p>Campaign screen concept</p>
+                <p>{videoUrl ? "Your uploaded video ad" : "Campaign screen concept"}</p>
               </div>
-              <span className="dashboard-panel-tag">TEXT PREVIEW</span>
+              <span className="dashboard-panel-tag">
+                {videoUrl ? "VIDEO" : "TEXT PREVIEW"}
+              </span>
             </div>
-            <div className="view-ad-screen">
-              <span>{ad.brand}</span>
-              <strong>{ad.name}</strong>
-              <small>Hyderabad · {ad.area}</small>
-              <span className="view-ad-screen-button">Campaign creative</span>
-            </div>
+            {videoUrl ? (
+              <video
+                className="view-ad-video"
+                src={videoUrl}
+                controls
+                playsInline
+                preload="metadata"
+              />
+            ) : (
+              <div className="view-ad-screen">
+                <span>{ad.brand}</span>
+                <strong>{ad.name}</strong>
+                <small>Hyderabad · {ad.area}</small>
+                <span className="view-ad-screen-button">Campaign creative</span>
+              </div>
+            )}
             <p className="fine">
-              Text preview only. The original video asset is not stored here.
+              {videoUrl
+                ? "Video is stored in this browser only."
+                : "Text preview only. No video file is stored for this campaign."}
             </p>
           </aside>
         </section>
-        {admin && <AdLocationHistory advertisement={ad} />}
+        <AdLocationHistory advertisement={ad} />
       </div>
     </section>
   );

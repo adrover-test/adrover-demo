@@ -40,12 +40,13 @@ the source HTML or TypeScript.
 
 Register opens the creative onboarding form directly. Select a campaign video
 and banner to preview them on the mock screen, then edit campaign days, requested
-cabs and plays per cab per day directly in the campaign sidebar.
+cabs and plays per day directly in the campaign sidebar.
 The sidebar and Plan calculator share selections and update the price immediately.
-Select a video and use the same cabs × days × plays-per-cab-per-day calculator as
-Pricing in the Plan step. The total estimated plays and amount update the sidebar,
-review and saved local brief; invalid selections block continuing. Each play is
-30 seconds and is estimated at INR 0.30.
+Select a video and use the same plays-per-day × days calculator as Pricing in the
+Plan step. Cab count is limited to 10, 20 or 30 and does not affect the estimate.
+The total estimated plays and amount update the sidebar, review and saved local
+brief; invalid selections block continuing. Each play is 30 seconds and is
+estimated at INR 0.30. Plans start at 1,000 plays per day and 7 days.
 MP4/WebM videos must be non-empty, browser-playable and at most 100 MB. Files stay
 local and are cleared on refresh. The old `pricing.html#registration` URL redirects
 to `register.html`; Pricing remains a separate calculator and video-preview page.
@@ -361,11 +362,12 @@ Use `npm run format` to format source and configuration.
 
 ## Deliberate limitations before a business launch
 
-- The calculator estimates total plays as cabs × campaign days × plays per cab per
-  day, at INR 0.30 per 30-second play. The default 20 cabs × 10 days × 50 plays
-  per cab per day equals 10,000 estimated plays and INR 3,000. It is an
-  illustration, not a quotation or reservation. Taxes and final placement details
-  apply at checkout; availability and delivery commitments require confirmation.
+- The calculator estimates total plays as plays per day × campaign days, at INR
+  0.30 per 30-second play. The minimum 1,000 plays per day × 7 days equals 7,000
+  estimated plays and INR 2,100. Cab count (10, 20 or 30) does not affect the
+  estimate. It is an illustration, not a quotation or reservation. Taxes and
+  final placement details apply at checkout; availability and delivery
+  commitments require confirmation.
 - Contact fields download a local text draft only. Nothing is sent, uploaded or stored on a
   backend. The site has no admin login, payment integration or server video uploads;
   the campaign studio supports private local video previews only.
@@ -378,3 +380,7 @@ Use `npm run format` to format source and configuration.
   invented for your business materials.
 "# adrover-demo" 
 "# adrover-demo" 
+
+## Razorpay payments
+
+The registration flow ends with a Razorpay Checkout payment step. Copy `.env.example` to `.env` and set `VITE_RAZORPAY_KEY_ID` (use an `rzp_test_` key for testing), then rebuild. This static site has no backend, so orders and payment signatures are not verified server-side and refunds are issued from the Razorpay dashboard.

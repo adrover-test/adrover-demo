@@ -35,9 +35,11 @@ function answerQuestion(question: string): Reply {
       text,
     )
   ) {
-    const plays = 20 * 10 * 50;
+    const playsPerDay = 1000;
+    const days = 7;
+    const plays = playsPerDay * days;
     return {
-      text: `Each 30-second play is ₹0.30. Your estimate is calculated as cabs × days × plays per cab per day. For example, 20 cabs × 10 days × 50 plays/day = ${number.format(plays)} plays, or ${currency.format(plays * 0.3)} before taxes. The planner requires more than 1,000 estimated plays. This is illustrative; availability, final placement and taxes can change the final quote.`,
+      text: `Each 30-second play is ₹0.30. Estimate your campaign as plays per day × campaign days; cab count does not affect the price. The minimum plan is 1,000 plays/day × 7 days = ${number.format(plays)} plays, or ${currency.format(plays * 0.3)} before taxes. This is illustrative; availability, final placement and taxes can change the final quote.`,
       href: "pricing.html#planner",
       linkText: "Open campaign planner",
     };

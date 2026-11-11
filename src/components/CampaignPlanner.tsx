@@ -1,7 +1,12 @@
 import {
+  cabCountOptions,
   calculate,
   campaignQuery,
-  isPositiveInteger,
+  isSupportedCabCount,
+  isValidCampaignDays,
+  isValidDailyPlays,
+  minimumCampaignDays,
+  minimumDailyPlays,
   moneyFormat,
   numberFormat,
 } from "../lib/campaign";
@@ -13,9 +18,9 @@ export type CampaignSelection = {
   dailyPlays: string;
 };
 export const defaultCampaignSelection: CampaignSelection = {
-  vehicles: "20",
-  days: "10",
-  dailyPlays: "50",
+  vehicles: "10",
+  days: String(minimumCampaignDays),
+  dailyPlays: String(minimumDailyPlays),
 };
 
 export function CampaignPlanner({
@@ -125,21 +130,22 @@ export function CampaignPlanner({
               </span>
               <div>
                 <label htmlFor="vehicle-count">Number of Cabs</label>
-                <p id="cabs-guidance">
-                  How many cabs do you want to advertise in?
-                </p>
+                <p id="cabs-guidance">Choose 10, 20, or 30 cabs.</p>
               </div>
             </div>
-            <input
+            <select
               id="vehicle-count"
-              type="number"
-              min="1"
-              step="1"
               value={vehicles}
               onChange={(event) => setVehicles(event.target.value)}
-              aria-invalid={!isPositiveInteger(vehicles)}
+              aria-invalid={!isSupportedCabCount(vehicles)}
               aria-describedby="cabs-guidance pricing-error"
-            />
+            >
+              {cabCountOptions.map((count) => (
+                <option key={count} value={count}>
+                  {count}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="cab-config-row">
             <div className="cab-count-label">
@@ -154,24 +160,21 @@ export function CampaignPlanner({
                 </svg>
               </span>
               <div>
-                <label htmlFor="daily-play-count">Plays per Cab per Day</label>
-                <p id="plays-guidance">Each play is a 30-second ad.</p>
+                <label htmlFor="daily-play-count">Plays per Day</label>
+                <p id="plays-guidance">
+                  Minimum {numberFormat.format(minimumDailyPlays)} plays/day.
+                  Each play is 30 seconds.
+                </p>
               </div>
             </div>
             <input
               id="daily-play-count"
               type="number"
-              min="1"
+              min={minimumDailyPlays}
               step="1"
               value={dailyPlays}
               onChange={(event) => setDailyPlays(event.target.value)}
-              aria-invalid={
-                !isPositiveInteger(dailyPlays) ||
-                (!result.ok &&
-                  isPositiveInteger(vehicles) &&
-                  isPositiveInteger(days) &&
-                  isPositiveInteger(dailyPlays))
-              }
+              aria-invalid={!isValidDailyPlays(dailyPlays)}
               aria-describedby="plays-guidance pricing-error"
             />
           </div>
@@ -191,18 +194,18 @@ export function CampaignPlanner({
               <div>
                 <label htmlFor="campaign-days">Campaign Duration (Days)</label>
                 <p id="duration-guidance">
-                  Choose the number of campaign days.
+                  Minimum {minimumCampaignDays} campaign days.
                 </p>
               </div>
             </div>
             <input
               id="campaign-days"
               type="number"
-              min="1"
+              min={minimumCampaignDays}
               step="1"
               value={days}
               onChange={(event) => setDays(event.target.value)}
-              aria-invalid={!isPositiveInteger(days)}
+              aria-invalid={!isValidCampaignDays(days)}
               aria-describedby="duration-guidance pricing-error"
             />
           </div>
@@ -227,13 +230,13 @@ export function CampaignPlanner({
               <div>
                 <dt>Number of Cabs</dt>
                 <dd>
-                  {isPositiveInteger(vehicles)
+                  {isSupportedCabCount(vehicles)
                     ? numberFormat.format(Number(vehicles))
                     : "—"}
                 </dd>
               </div>
               <div>
-                <dt>Plays per Cab per Day</dt>
+                <dt>Plays per Day</dt>
                 <dd id="daily-play-result">
                   {estimate ? numberFormat.format(Number(dailyPlays)) : "—"}
                 </dd>
@@ -241,7 +244,7 @@ export function CampaignPlanner({
               <div>
                 <dt>Campaign duration</dt>
                 <dd>
-                  {isPositiveInteger(days)
+                  {isValidCampaignDays(days)
                     ? `${numberFormat.format(Number(days))} days`
                     : "—"}
                 </dd>
@@ -255,9 +258,8 @@ export function CampaignPlanner({
             </dl>
             {estimate && (
               <p className="cab-play-breakdown" id="plays-breakdown">
-                {numberFormat.format(estimate.vehicles)} cabs ×{" "}
-                {numberFormat.format(estimate.days)} days ×{" "}
-                {numberFormat.format(estimate.dailyPlays)} plays/day/cab ={" "}
+                {numberFormat.format(estimate.dailyPlays)} plays/day ×{" "}
+                {numberFormat.format(estimate.days)} days ={" "}
                 {numberFormat.format(estimate.plays)} estimated plays
               </p>
             )}
@@ -288,9 +290,9 @@ export function CampaignPlanner({
         </aside>
       </div>
       <p className="fine">
-        Estimated plays = cabs × days × plays per cab per day. Each play is a
-        30-second ad at ₹0.30 per play. Taxes and final placement details apply
-        at checkout. Total estimated plays must be greater than 1,000.
+        Estimated plays = plays per day × campaign days; cabs do not affect the
+        estimate. Each 30-second play costs ₹0.30. Minimums: 1,000 plays per
+        day and 7 days. Taxes and final placement details apply at checkout.
       </p>
     </section>
   );

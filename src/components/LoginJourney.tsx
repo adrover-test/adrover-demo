@@ -6,7 +6,7 @@ export function LoginJourney() {
           {[
             [
               "01",
-              "Plan with clarity",
+              "Plan your Ads",
               "Explore an illustrative campaign estimate.",
               "M8 3h11l6 6v20H8zM19 3v7h6M12 15h9m-9 5h9",
             ],
@@ -105,26 +105,6 @@ export function LoginJourney() {
           <path d="m44 11-21 17h45V11zm30 0v17h45L101 11z" fill="#204439" />
           <rect x="68" y="1" width="15" height="6" rx="2" fill="#ffd21c" />
           <rect x="47" y="33" width="69" height="21" rx="3" fill="#ffd21c" />
-          <text
-            x="81"
-            y="42"
-            textAnchor="middle"
-            fontSize="7"
-            fontWeight="700"
-            fill="#101814"
-          >
-            YOUR AD
-          </text>
-          <text
-            x="81"
-            y="50"
-            textAnchor="middle"
-            fontSize="7"
-            fontWeight="700"
-            fill="#101814"
-          >
-            HERE
-          </text>
           {[27, 135].map((x) => (
             <g key={x}>
               <circle cx={x} cy="56" r="13" fill="#101814" />
@@ -141,16 +121,16 @@ export function LoginJourney() {
       </svg>
       <div className="login-journey-stats">
         <div>
-          <strong>₹0.30</strong>
-          <span>Per 30-second play</span>
+          <strong>₹2,100</strong>
+          <span>Minimum estimate</span>
         </div>
         <div>
-          <strong>10,000</strong>
-          <span>Estimated plays</span>
+          <strong>7,000</strong>
+          <span>Minimum estimated plays</span>
         </div>
         <div>
-          <strong>20 × 10 × 50</strong>
-          <span>Cabs × days × plays per cab/day</span>
+          <strong>1,000 × 7</strong>
+          <span>Plays per day × campaign days</span>
         </div>
       </div>
     </div>

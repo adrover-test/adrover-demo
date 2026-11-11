@@ -26,9 +26,10 @@ interface Props {
 }
 
 const STARTER_PLAN = {
-  plays: 10000,
+  plays: 7000,
   days: 7,
-  price: 1000,
+  cabs: 10,
+  price: 2100,
 };
 
 export const CreateAdScreen: React.FC<Props> = ({ navigation }) => {
@@ -164,7 +165,7 @@ export const CreateAdScreen: React.FC<Props> = ({ navigation }) => {
       target: STARTER_PLAN.plays,
       elapsedDays: 0,
       totalDays: STARTER_PLAN.days,
-      cabs: 15,
+      cabs: STARTER_PLAN.cabs,
       fleet: "Fleet reservation is not confirmed",
       note: `Starter plan: ${STARTER_PLAN.plays.toLocaleString("en-IN")} plays over ${STARTER_PLAN.days} days. Starting price: ₹${STARTER_PLAN.price.toLocaleString("en-IN")}. Banner: ${bannerName || "Local creative"}. Review pending; availability and final pricing require confirmation.`,
     };
@@ -561,8 +562,10 @@ export const CreateAdScreen: React.FC<Props> = ({ navigation }) => {
             {/* Plan Metrics Row */}
             <View style={styles.planMetricsRow}>
               <View style={styles.planMetricItem}>
-                <Text style={styles.metricBig}>10,000</Text>
-                <Text style={styles.metricSmall}>Guaranteed plays</Text>
+                <Text style={styles.metricBig}>
+                  {STARTER_PLAN.plays.toLocaleString("en-IN")}
+                </Text>
+                <Text style={styles.metricSmall}>Estimated plays</Text>
               </View>
               <View style={styles.metricVDivider} />
               <View style={styles.planMetricItem}>
@@ -571,7 +574,7 @@ export const CreateAdScreen: React.FC<Props> = ({ navigation }) => {
               </View>
               <View style={styles.metricVDivider} />
               <View style={styles.planMetricItem}>
-                <Text style={styles.metricBig}>15 Cabs</Text>
+                <Text style={styles.metricBig}>{STARTER_PLAN.cabs} Cabs</Text>
                 <Text style={styles.metricSmall}>Dedicated fleet</Text>
               </View>
             </View>

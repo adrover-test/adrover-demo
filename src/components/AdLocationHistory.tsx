@@ -1,12 +1,15 @@
 import { useState } from "react";
 import type { Advertisement } from "../lib/advertisements";
 import { getCabDrivers } from "../lib/admin";
+import { AdRouteMap } from "./AdRouteMap";
 
 type PlaybackRecord = {
   date: string;
   time: string;
   vehicle: string;
   location: string;
+  area: string;
+  seed: number;
   x: number;
   y: number;
 };
@@ -66,6 +69,8 @@ function getPlaybackRecords(
       vehicle:
         fleet[index]?.car ?? `DEMO-CAB-${String(index + 1).padStart(3, "0")}`,
       location: `${area} · Route segment ${((index + dayNumber) % 4) + 1}`,
+      area,
+      seed: dayNumber * 1000 + index + 1,
       x,
       y,
     };
@@ -83,13 +88,20 @@ export function AdLocationHistory({
   const previousDate = new Date();
   previousDate.setDate(previousDate.getDate() - 13);
   const minDate = toDateKey(previousDate);
-  const areas = advertisement.area
-    .split(/\s*&\s*/)
-    .map((area) => area.trim())
-    .filter(Boolean);
-  const routeAreas = areas.length ? areas : ["Hyderabad"];
   const fleet = getCabDrivers().filter((cab) => cab.status !== "Maintenance");
   const records = getPlaybackRecords(advertisement, selectedDate, fleet);
+  const historyDays = Array.from({ length: 14 }, (_, index) => {
+    const day = new Date();
+    day.setDate(day.getDate() - (13 - index));
+    return toDateKey(day);
+  });
+  const hourlyPlays = Array.from({ length: 12 }, (_, index) => ({
+    hour: 8 + index,
+    count: records.filter(
+      (record) => Number(record.time.slice(0, 2)) === 8 + index,
+    ).length,
+  }));
+  const maxHourly = Math.max(1, ...hourlyPlays.map((entry) => entry.count));
   const selectedRecord =
     records.find((record) => record.vehicle === selectedVehicle) ?? records[0];
 
@@ -127,6 +139,22 @@ export function AdLocationHistory({
         Simulated route locations are calculated from the campaign cab count and
         target areas. They are not live GPS or verified playback telemetry.
       </p>
+      <div className="admin-location-days" role="group" aria-label="Saved days">
+        {historyDays.map((day) => (
+          <button
+            key={day}
+            type="button"
+            className={`admin-location-day${day === selectedDate ? " admin-location-day-active" : ""}`}
+            aria-pressed={day === selectedDate}
+            onClick={() => changeDate(day)}
+          >
+            {dateFromKey(day).toLocaleDateString("en-IN", {
+              day: "numeric",
+              month: "short",
+            })}
+          </button>
+        ))}
+      </div>
       <p className="admin-location-count" role="status" aria-live="polite">
         {records.length} campaign cabs ·{" "}
         {dateFromKey(selectedDate).toLocaleDateString("en-IN", {
@@ -137,55 +165,11 @@ export function AdLocationHistory({
       </p>
       {records.length > 0 ? (
         <>
-          <div
-            className="admin-location-map"
-            role="group"
-            aria-label={`Schematic playback map for ${selectedDate}`}
-          >
-            <svg
-              className="admin-location-map-art"
-              viewBox="0 0 1000 500"
-              preserveAspectRatio="none"
-              aria-hidden="true"
-            >
-              <path d="M-20 390 C140 320 180 360 310 270 S520 180 650 250 840 330 1020 140" />
-              <path d="M80 520 C190 390 260 360 340 260 S500 100 650 -20" />
-              <path d="M230 -20 C280 110 390 170 470 250 S650 400 850 520" />
-              <path d="M-20 170 C170 230 280 210 430 140 S730 80 1020 240" />
-              <path d="M600 520 C620 410 720 340 790 250 S850 110 930 -20" />
-            </svg>
-            {routeAreas.map((area, index) => (
-              <span
-                key={`${area}-${index}`}
-                className="admin-location-map-label"
-                style={{
-                  left: `${10 + index * (80 / routeAreas.length)}%`,
-                }}
-              >
-                {area}
-              </span>
-            ))}
-            {records.map((record) => (
-              <button
-                key={record.vehicle}
-                className={`admin-location-marker${record.vehicle === selectedRecord?.vehicle ? " admin-location-marker-selected" : ""}`}
-                style={{ left: `${record.x}%`, top: `${record.y}%` }}
-                data-vehicle={record.vehicle}
-                data-x={record.x}
-                data-y={record.y}
-                aria-label={`${record.vehicle}: ${record.location}, played at ${record.time}`}
-                aria-pressed={record.vehicle === selectedRecord?.vehicle}
-                title={`${record.vehicle} · ${record.location} · ${record.time}`}
-                onClick={() => setSelectedVehicle(record.vehicle)}
-                type="button"
-              >
-                <span aria-hidden="true" />
-              </button>
-            ))}
-            <span className="admin-location-map-caption">
-              {records.length} car markers · schematic route map
-            </span>
-          </div>
+          <AdRouteMap
+            cabs={records}
+            selected={selectedRecord?.vehicle}
+            onSelect={setSelectedVehicle}
+          />
           <p className="admin-location-selected" aria-live="polite">
             Selected car: <strong>{selectedRecord?.vehicle}</strong>
             {" · "}
@@ -193,6 +177,21 @@ export function AdLocationHistory({
             {" · Played at "}
             {selectedRecord?.time}
           </p>
+          <div className="admin-location-hourly">
+            <h3>Cab activity by hour</h3>
+            <div className="admin-location-hourly-bars">
+              {hourlyPlays.map((entry) => (
+                <div key={entry.hour} className="admin-location-hourly-col">
+                  <span
+                    className="admin-location-hourly-bar"
+                    style={{ height: `${(entry.count / maxHourly) * 100}%` }}
+                    title={`${entry.count} cabs at ${entry.hour}:00`}
+                  />
+                  <small>{String(entry.hour).padStart(2, "0")}</small>
+                </div>
+              ))}
+            </div>
+          </div>
           <div className="dashboard-table-scroll">
             <table className="dashboard-table admin-location-table">
               <thead>
@@ -225,7 +224,8 @@ export function AdLocationHistory({
         </>
       ) : (
         <p className="admin-location-empty">
-          No campaign cabs are assigned to show on the map.
+          No cabs are assigned yet. Locations appear here once the campaign is
+          approved and scheduled.
         </p>
       )}
     </section>

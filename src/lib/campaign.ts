@@ -1,5 +1,8 @@
 export const supportedTypes = ["Cabs"] as const;
 export type VehicleType = (typeof supportedTypes)[number];
+export const cabCountOptions = [10, 20, 30] as const;
+export const minimumCampaignDays = 7;
+export const minimumDailyPlays = 1000;
 export type Estimate = {
   vehicles: number;
   days: number;
@@ -29,6 +32,18 @@ export function isPositiveInteger(value: string | number | null): boolean {
   return Number.isSafeInteger(Number(value)) && Number(value) > 0;
 }
 
+export function isSupportedCabCount(value: string | number | null): boolean {
+  return cabCountOptions.some((count) => count === Number(value));
+}
+
+export function isValidCampaignDays(value: string | number | null): boolean {
+  return isPositiveInteger(value) && Number(value) >= minimumCampaignDays;
+}
+
+export function isValidDailyPlays(value: string | number | null): boolean {
+  return isPositiveInteger(value) && Number(value) >= minimumDailyPlays;
+}
+
 export function calculate(
   vehicles: string | number | null,
   days: string | number | null,
@@ -40,27 +55,30 @@ export function calculate(
       ok: false,
       error: "Cab advertising is the only supported format.",
     };
-  const names = ["Cab count", "Campaign days", "Plays per cab per day"];
-  const values = [vehicles, days, dailyPlays].map(Number);
-  const badIndex = values.findIndex((value) => !isPositiveInteger(value));
-  if (badIndex !== -1)
+  if (!isSupportedCabCount(vehicles))
     return {
       ok: false,
-      error: `${names[badIndex]} must be a positive whole number.`,
+      error: "Cab count must be 10, 20, or 30.",
     };
-  const [vehicleCount, duration, daily] = values;
-  const plays = vehicleCount * duration * daily;
+  if (!isValidCampaignDays(days))
+    return {
+      ok: false,
+      error: `Campaign duration must be at least ${minimumCampaignDays} days.`,
+    };
+  if (!isValidDailyPlays(dailyPlays))
+    return {
+      ok: false,
+      error: `Plays per day must be at least ${numberFormat.format(minimumDailyPlays)}.`,
+    };
+  const vehicleCount = Number(vehicles);
+  const duration = Number(days);
+  const daily = Number(dailyPlays);
+  const plays = duration * daily;
   if (!Number.isSafeInteger(plays)) {
     return {
       ok: false,
       error:
         "The values are too large for a reliable estimate. Use smaller values and discuss larger campaigns with Adrover.",
-    };
-  }
-  if (plays <= 1000) {
-    return {
-      ok: false,
-      error: "Total estimated plays must be greater than 1,000.",
     };
   }
   const cents = plays * 30;
@@ -112,5 +130,5 @@ export function campaignQuery(estimate: Estimate): string {
 }
 
 export function campaignDescription(estimate: Estimate): string {
-  return `${numberFormat.format(estimate.vehicles)} cabs × ${numberFormat.format(estimate.days)} days × ${numberFormat.format(estimate.dailyPlays)} plays per cab per day = ${numberFormat.format(estimate.plays)} estimated 30-second plays; ${moneyFormat.format(estimate.cost)} at ₹0.30 per play. Taxes and final placement details apply at checkout.`;
+  return `${numberFormat.format(estimate.dailyPlays)} plays per day × ${numberFormat.format(estimate.days)} days = ${numberFormat.format(estimate.plays)} estimated 30-second plays; ${moneyFormat.format(estimate.cost)} at ₹0.30 per play. Requested fleet: ${numberFormat.format(estimate.vehicles)} cabs. Taxes and final placement details apply at checkout.`;
 }

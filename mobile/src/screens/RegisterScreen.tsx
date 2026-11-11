@@ -319,7 +319,7 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
           <View>
             <Text style={styles.screenHeading}>Select Campaign Tier</Text>
             <Text style={styles.screenSub}>
-              Choose guaranteed play volume and fleet cab allocations.
+              Choose estimated play volume and fleet cab allocations.
             </Text>
 
             {PLAN_TIERS.map((tier) => (
@@ -339,7 +339,7 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                 </View>
 
                 <View style={styles.planMeta}>
-                  <Text style={styles.planMetaText}>🎯 {tier.plays.toLocaleString()} Plays</Text>
+                  <Text style={styles.planMetaText}>🎯 {tier.plays.toLocaleString()} Estimated Plays</Text>
                   <Text style={styles.planMetaText}>📅 {tier.days} Days</Text>
                   <Text style={styles.planMetaText}>🚕 ~{tier.cabs} Cabs</Text>
                 </View>

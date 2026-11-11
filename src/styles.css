@@ -254,7 +254,6 @@ summary:focus-visible {
 .button.ghost {
   background: transparent;
   border: 1px solid #9cac91;
-  color: var(--ink);
 }
 .button.dark {
   background: var(--ink);
@@ -1805,6 +1804,38 @@ footer {
   min-height: 49px;
   border-color: var(--line);
   background: #fff;
+}
+.login-phone-input {
+  display: flex;
+  min-height: 49px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+}
+.login-phone-input:focus-within {
+  border-color: var(--green);
+  box-shadow: 0 0 0 4px rgb(8 122 69 / 9%);
+}
+.login-phone-input > span {
+  display: flex;
+  align-items: center;
+  padding: 0 13px;
+  border-right: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 15px;
+}
+.login-form .field .login-phone-input input {
+  min-width: 0;
+  border: 0;
+  border-radius: 0 9px 9px 0;
+  background: transparent;
+  box-shadow: none;
+}
+.login-form .field .login-phone-input input:focus {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
 }
 .login-form .field input::placeholder {
   color: #929b8e;
@@ -5887,6 +5918,96 @@ footer {
   border-radius: 9px;
   object-fit: contain;
 }
+.ad-route-map {
+  height: 420px;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  z-index: 0;
+}
+.view-ad-video {
+  width: 100%;
+  max-height: 320px;
+  border-radius: 12px;
+  background: #000;
+}
+.admin-location-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0;
+}
+.admin-location-day {
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 11px;
+  cursor: pointer;
+}
+.admin-location-day-active {
+  border-color: var(--green);
+  background: var(--green);
+  color: #fff;
+}
+.admin-location-hourly {
+  margin: 16px 0;
+}
+.admin-location-hourly h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.admin-location-hourly-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 110px;
+}
+.admin-location-hourly-col {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  height: 100%;
+  gap: 4px;
+}
+.admin-location-hourly-bar {
+  display: block;
+  width: 100%;
+  min-height: 2px;
+  border-radius: 4px 4px 0 0;
+  background: var(--green);
+}
+.admin-location-hourly-col small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.registration-payment-amount {
+  display: grid;
+  gap: 4px;
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f5f7f1;
+}
+.registration-payment-amount span,
+.registration-payment-amount small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.registration-payment-amount strong {
+  font-size: 28px;
+}
+.registration-payment-refund {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 9px;
+  background: #eaf6ee;
+  font-size: 12px;
+  line-height: 1.55;
+}
 .registration-consent {
   display: flex;
   align-items: flex-start;
@@ -6673,6 +6794,7 @@ footer {
   margin: 5px 0 0;
 }
 .cab-config-row input,
+.cab-config-row select,
 .cab-duration-row > input {
   width: 100%;
   min-width: 0;
@@ -6684,6 +6806,7 @@ footer {
   font: inherit;
 }
 .cab-config-row input[aria-invalid="true"],
+.cab-config-row select[aria-invalid="true"],
 .cab-duration-row > input[aria-invalid="true"] {
   border-color: #aa3030;
 }
