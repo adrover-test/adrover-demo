@@ -2,7 +2,6 @@ import { useState, type FormEvent } from "react";
 import { campaignDescription, readCampaign } from "../lib/campaign";
 import { requestDownload } from "../lib/download";
 import { saveDemoEnquiry } from "../lib/portal";
-import { VehicleOptions } from "./VehicleOptions";
 
 export function EnquiryForm() {
   const [incoming] = useState(() => readCampaign(window.location.search));
