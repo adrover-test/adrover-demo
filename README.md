@@ -384,3 +384,27 @@ Use `npm run format` to format source and configuration.
 ## Razorpay payments
 
 The registration flow ends with a Razorpay Checkout payment step. Copy `.env.example` to `.env` and set `VITE_RAZORPAY_KEY_ID` (use an `rzp_test_` key for testing), then rebuild. This static site has no backend, so orders and payment signatures are not verified server-side and refunds are issued from the Razorpay dashboard.
+
+## Driver portal
+
+`driver-login.html` (mobile number + OTP) and `driver.html` (hash-routed app:
+`#/home`, `#/ads`, `#/earnings`, `#/vehicle`, `#/profile`, `#/notifications`,
+`#/report`, `#/issues`, `#/help`) live in `src/driver`. Set `VITE_API_BASE_URL`
+to the Adrover backend. When it is empty the portal runs in demo mode with
+sample data from `src/driver/demo.ts` and accepts OTP `123456` for any 10-digit
+number. With a backend URL set there is no mock data: every screen shows a "Missing
+service" message naming the endpoint if the backend does not provide it.
+
+Languages (English, ??????, ??????) are JSON files in
+`src/driver/locales/<lang>/<namespace>.json`; add a key to all three languages.
+The preference is saved with `PUT /api/v1/drivers/language` and loaded from
+`GET /api/v1/drivers/profile` (`preferredLanguage`: `en` | `te` | `hi` | null).
+
+Endpoints used (all under `/api/v1/drivers`, JWT bearer, `Accept-Language` sent):
+`POST auth/otp/request`, `POST auth/otp/verify` (`{accessToken}`), `GET|PUT profile`,
+`POST profile/photo`, `PUT language`, `GET dashboard`, `GET advertisements/today`,
+`GET advertisements/history?from&to`, `GET earnings?period`, `GET payments?period`,
+`GET payments/{id}`, `GET vehicle`, `GET notifications` (`{items, unreadCount}`),
+`PUT notifications/{id}/read`, `GET|POST issues` (multipart, `Idempotency-Key`),
+`GET issues/{id}`, `POST issues/{id}/confirm`, `POST issues/{id}/reopen`.
+Response shapes are the types in `src/driver/api.ts`.

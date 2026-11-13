@@ -254,6 +254,7 @@ summary:focus-visible {
 .button.ghost {
   background: transparent;
   border: 1px solid #9cac91;
+  color: black;
 }
 .button.dark {
   background: var(--ink);

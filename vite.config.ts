@@ -23,6 +23,8 @@ export default defineConfig({
           "payments",
           "admin-login",
           "admin",
+          "driver-login",
+          "driver",
         ].map((page) => [page, resolve(import.meta.dirname, `${page}.html`)]),
       ),
     },

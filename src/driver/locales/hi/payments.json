@@ -1,0 +1,20 @@
+{
+  "title": "भुगतान इतिहास",
+  "txnId": "लेनदेन ID",
+  "date": "भुगतान की तारीख",
+  "amount": "राशि",
+  "status": "स्थिति",
+  "reference": "भुगतान संदर्भ",
+  "period": "भुगतान की अवधि",
+  "periodValue": "{{from}} से {{to}} तक",
+  "notPaid": "अभी भुगतान नहीं हुआ",
+  "noReference": "अभी संदर्भ नहीं है",
+  "status.released": "भुगतान हो गया",
+  "status.processing": "प्रक्रिया में",
+  "status.pending": "बाकी",
+  "status.failed": "असफल",
+  "details": "भुगतान का विवरण",
+  "open": "भुगतान {{id}} खोलें",
+  "empty": "इस अवधि में कोई भुगतान नहीं है।",
+  "back": "भुगतान पर वापस जाएँ"
+}

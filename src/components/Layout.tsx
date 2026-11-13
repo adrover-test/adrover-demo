@@ -39,8 +39,10 @@ export function Layout({
 
   const isLanding = currentPage === "index.html";
   const isAdmin = currentPage === "admin.html";
+  const isDriver = currentPage === "driver.html";
   const isPortal =
     isAdmin ||
+    isDriver ||
     [
       "dashboard.html",
       "advertisements.html",
@@ -75,7 +77,11 @@ export function Layout({
           <div className="portal-topbar-info">
             <span className="portal-topbar-badge">
               <span aria-hidden="true" />
-              {isAdmin ? "Website admin" : "Advertiser portal"}
+              {isAdmin
+                ? "Website admin"
+                : isDriver
+                  ? "Driver portal"
+                  : "Advertiser portal"}
             </span>
             <a href="index.html">View public website</a>
             <a
@@ -83,9 +89,17 @@ export function Layout({
               href={
                 isAdmin
                   ? "admin-login.html?signedOut=1"
-                  : "login.html?signedOut=1"
+                  : isDriver
+                    ? "driver-login.html?signedOut=1"
+                    : "login.html?signedOut=1"
               }
-              onClick={isAdmin ? endAdminSession : endDemoSession}
+              onClick={
+                isAdmin
+                  ? endAdminSession
+                  : isDriver
+                    ? () => localStorage.removeItem("adrover-driver-token")
+                    : endDemoSession
+              }
             >
               Sign out
             </a>

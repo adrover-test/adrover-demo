@@ -1,0 +1,20 @@
+{
+  "title": "Payment history",
+  "txnId": "Transaction ID",
+  "date": "Payment date",
+  "amount": "Amount",
+  "status": "Status",
+  "reference": "Payment reference",
+  "period": "Payment period",
+  "periodValue": "{{from}} to {{to}}",
+  "notPaid": "Not paid yet",
+  "noReference": "No reference yet",
+  "status.released": "Released",
+  "status.processing": "Processing",
+  "status.pending": "Pending",
+  "status.failed": "Failed",
+  "details": "Payment details",
+  "open": "Open payment {{id}}",
+  "empty": "No payments for this period.",
+  "back": "Back to payments"
+}

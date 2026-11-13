@@ -138,6 +138,9 @@ export function Login() {
             browser, no SMS is sent, and this does not verify your identity.
             Production sign-in requires server-side OTP verification.
           </p>
+          <a className="text-link" href="driver-login.html">
+            Driver sign in
+          </a>
           <a className="text-link" href="admin-login.html">
             Website admin sign in
           </a>

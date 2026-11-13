@@ -1,0 +1,19 @@
+{
+  "title": "Earnings",
+  "subtitle": "What you have earned and what has actually been paid to you.",
+  "filter.weekly": "This week",
+  "filter.monthly": "This month",
+  "total": "Total earnings",
+  "thisMonth": "Earned this month",
+  "pending": "Pending payment",
+  "processing": "Being processed",
+  "released": "Payment released",
+  "nextPayout": "Next expected payout",
+  "nextPayoutValue": "{{amount}} on {{date}}",
+  "nextPayoutNone": "Not announced yet",
+  "note": "“Earned” is the amount you have earned from ads. Only “Payment released” has been sent to you.",
+  "perAd.title": "Earnings per advertisement",
+  "perAd.plays": "{{count}} plays",
+  "perAd.empty": "No earnings for this period.",
+  "viewPayments": "See payment history"
+}

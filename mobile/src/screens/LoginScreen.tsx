@@ -159,6 +159,13 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.submitBtnText}>Enter advertiser portal</Text>
             </TouchableOpacity>
 
+            <View style={styles.createRow}>
+              <Text style={styles.createText}>Are you a driver?</Text>
+              <TouchableOpacity onPress={() => navigation.navigate("DriverLogin")}>
+                <Text style={styles.createLink}>Driver sign in</Text>
+              </TouchableOpacity>
+            </View>
+
             {/* New to Adrover */}
             <View style={styles.createRow}>
               <Text style={styles.createText}>New to Adrover?</Text>

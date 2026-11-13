@@ -13,9 +13,10 @@ import { AdroverLogo } from "./AdroverLogo";
 
 interface Props {
   onSignOut: () => void;
+  label?: string;
 }
 
-export const PortalHeader: React.FC<Props> = ({ onSignOut }) => {
+export const PortalHeader: React.FC<Props> = ({ onSignOut, label = "Advertiser portal" }) => {
   const insets = useSafeAreaInsets();
 
   // Compute safe top inset so the header never overlaps with battery, time or notch
@@ -34,7 +35,7 @@ export const PortalHeader: React.FC<Props> = ({ onSignOut }) => {
         <View style={styles.rightInfo}>
           <View style={styles.portalBadge}>
             <View style={styles.pulseDot} />
-            <Text style={styles.portalBadgeText}>Advertiser portal</Text>
+            <Text style={styles.portalBadgeText}>{label}</Text>
           </View>
 
           <TouchableOpacity
