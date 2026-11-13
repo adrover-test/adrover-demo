@@ -125,7 +125,7 @@ export function EnquiryForm() {
           />
         </div>
         <div className="field">
-          <label htmlFor="work-email">Work email *</label>
+          <label htmlFor="work-email">Work email</label>
           <input
             id="work-email"
             name="email"
@@ -133,18 +133,18 @@ export function EnquiryForm() {
             required
             maxLength={254}
             autoComplete="email"
-            placeholder="Your email address"
+            placeholder="Optional email address"
           />
         </div>
         <div className="field">
-          <label htmlFor="contact-phone">Phone / WhatsApp</label>
+          <label htmlFor="contact-phone">Phone / WhatsApp *</label>
           <input
             id="contact-phone"
             name="phone"
             type="tel"
             maxLength={35}
             autoComplete="tel"
-            placeholder="Optional contact number"
+            placeholder="contact number"
           />
         </div>
         <div className="field">
@@ -155,12 +155,6 @@ export function EnquiryForm() {
             <option>Launch a product or service</option>
             <option>Promote an offer or event</option>
             <option>Discuss a campaign idea</option>
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="preferred-format">Preferred screen format</label>
-          <select id="preferred-format" name="format" defaultValue={format}>
-            <VehicleOptions />
           </select>
         </div>
         <div className="field full">
@@ -174,16 +168,9 @@ export function EnquiryForm() {
         </div>
       </div>
       <button className="button" type="submit">
-        Save My Enquiry Draft
+        Send My Enquiry
       </button>
-      <button
-        className="button ghost small"
-        type="submit"
-        name="action"
-        value="admin-demo"
-      >
-        Save enquiry for admin
-      </button>
+
       <p className="error" role="alert">
         {error}
       </p>
