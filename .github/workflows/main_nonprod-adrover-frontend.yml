@@ -24,10 +24,12 @@ jobs:
           node-version: '~24'
 
       - name: npm install, build, and test
+        env:
+          VITE_API_BASE_URL: https://nonprod-adrover-backend-azhrgadreuaqggdh.westus3-01.azurewebsites.net
         run: |
           npm install
           npm run build
-      
+
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:

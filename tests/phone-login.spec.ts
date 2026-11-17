@@ -1,68 +1,36 @@
 import { expect, test } from "@playwright/test";
 
-test("client phone login validates numbers and starts a local demo session with the demo OTP", async ({
-  page,
-}) => {
-  const submissions: string[] = [];
-  page.on("request", (request) => {
-    if (request.method() !== "GET") submissions.push(request.url());
+test("client login uses the backend and creates a session only after successful credentials", async ({ page }) => {
+  const submissions: unknown[] = [];
+  await page.route("**/api/v1/auth/client-login", async (route) => {
+    const body = route.request().postDataJSON();
+    submissions.push(body);
+    if (body.password !== "correct-password") {
+      await route.fulfill({ status: 401, json: { error: { message: "Invalid email or password" } } });
+    } else {
+      await route.fulfill({ status: 200, json: { success: true, data: { accessToken: "access-token", refreshToken: "refresh-token" } } });
+    }
   });
   await page.goto("login.html?next=dashboard.html");
-  await expect(
-    page.locator(".login-journey .login-highlights article"),
-  ).toHaveCount(3);
-  await expect(
-    page.getByRole("img", { name: /Illustrated cab/ }),
-  ).toBeVisible();
-  await expect(page.locator(".login-journey-stats")).toContainText("₹0.30");
-  await expect(page.locator(".login-journey-stats")).toContainText("10,000");
-  await expect(page.locator(".login-journey-stats")).toContainText(
-    "20 × 10 × 50",
-  );
-  await expect(page.getByText("CLIENT LOGIN", { exact: true })).toBeVisible();
-  const phone = page.getByLabel("Phone number", { exact: true });
-  await expect(phone).toHaveAttribute("autocomplete", "tel");
-  await expect(page.locator("#login-email, #login-password")).toHaveCount(0);
-  const otp = page.getByLabel("One-time password (OTP)");
-  await expect(otp).toBeDisabled();
-  await expect(
-    page.getByRole("button", { name: /Verify demo OTP and sign in/ }),
-  ).toBeDisabled();
-  await phone.fill("9876543210");
-  expect(
-    await phone.evaluate(
-      (node) => (node as HTMLInputElement).validity.patternMismatch,
-    ),
-  ).toBe(true);
-  await expect(otp).toBeDisabled();
-  await phone.fill("+919876543210");
-  await page.getByRole("button", { name: /Generate demo OTP/ }).click();
-  await expect(page.locator(".login-status")).toContainText(
-    "Demo OTP: 123456",
-  );
-  await expect(otp).toBeEnabled();
-  expect(
-    await page.evaluate(() => sessionStorage.getItem("adrover-demo-session")),
-  ).toBeNull();
-  await otp.fill("000000");
-  await page.getByRole("button", { name: /Verify demo OTP and sign in/ }).click();
-  await expect(page.locator(".login-status")).toContainText(
-    "Incorrect demo OTP",
-  );
-  await expect(page).toHaveURL(/login\.html\?next=dashboard\.html$/);
-  expect(
-    await page.evaluate(() => sessionStorage.getItem("adrover-demo-session")),
-  ).toBeNull();
-  await otp.fill("123456");
-  await page.getByRole("button", { name: /Verify demo OTP and sign in/ }).click();
+  await expect(page.locator(".login-journey .login-highlights article")).toHaveCount(3);
+  await expect(page.locator("#login-otp, #login-phone")).toHaveCount(0);
+  await page.getByLabel("Email address").fill("client@example.com");
+  await page.getByLabel("Password").fill("wrong-password");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.locator(".login-status")).toContainText("Invalid email or password");
+  expect(await page.evaluate(() => sessionStorage.getItem("adrover-client-token"))).toBeNull();
+  await page.getByLabel("Password").fill("correct-password");
+  await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/dashboard\.html$/);
-  await expect(page.locator(".portal-exit")).toBeVisible();
-  expect(
-    await page.evaluate(() =>
-      JSON.parse(sessionStorage.getItem("adrover-demo-session") ?? "null"),
-    ),
-  ).toEqual({ email: "phone-919876543210@demo.adrover.local" });
-  expect(submissions).toEqual([]);
+  expect(await page.evaluate(() => sessionStorage.getItem("adrover-client-token"))).toBe("access-token");
+  expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem("adrover-demo-session") ?? "null"))).toEqual({ email: "client@example.com" });
+  expect(submissions).toEqual([
+    { email: "client@example.com", password: "wrong-password" },
+    { email: "client@example.com", password: "correct-password" },
+  ]);
+  await page.locator(".portal-exit").click();
+  expect(await page.evaluate(() => sessionStorage.getItem("adrover-client-token"))).toBeNull();
+  expect(await page.evaluate(() => sessionStorage.getItem("adrover-client-refresh-token"))).toBeNull();
 });
 
 test("login layout keeps sign-in first on smaller screens without horizontal overflow", async ({

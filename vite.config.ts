@@ -5,6 +5,11 @@ import { resolve } from "node:path";
 export default defineConfig({
   plugins: [react()],
   base: "./",
+  server: {
+    watch: {
+      ignored: ["**/.vs/**", "**/.git/**"],
+    },
+  },
   build: {
     rollupOptions: {
       input: Object.fromEntries(

@@ -17,15 +17,14 @@ import {
 } from "../lib/campaign";
 import { payWithRazorpay, razorpayConfigured } from "../lib/razorpay";
 import { saveAdVideo } from "../lib/adVideos";
+import { getClientToken, loginClient, registerClient } from "../lib/clientAuth";
 import { CampaignPlanner, defaultCampaignSelection } from "./CampaignPlanner";
 
-type Step = "creative" | "client" | "verify" | "plan" | "review" | "payment";
+type Step = "creative" | "client" | "plan" | "review" | "payment";
 
-const previewOtp = "123456";
 const steps: { id: Step; label: string }[] = [
   { id: "creative", label: "Creative" },
-  { id: "client", label: "Details" },
-  { id: "verify", label: "Verify" },
+  { id: "client", label: "Details & account" },
   { id: "plan", label: "Plan" },
   { id: "review", label: "Review" },
   { id: "payment", label: "Payment" },
@@ -56,10 +55,9 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
     phone: "",
     area: "Hyderabad citywide",
   });
-  const [emailCode, setEmailCode] = useState("");
-  const [phoneCode, setPhoneCode] = useState("");
-  const [emailVerified, setEmailVerified] = useState(false);
-  const [phoneVerified, setPhoneVerified] = useState(false);
+  const [accountCreated, setAccountCreated] = useState(false);
+  const [accountSignedIn, setAccountSignedIn] = useState(false);
+  const [creatingAccount, setCreatingAccount] = useState(false);
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -116,10 +114,17 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
     setBanner(file);
   }
 
-  function submitClient(event: FormEvent<HTMLFormElement>) {
+  async function submitClient(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    if (!form.reportValidity()) return;
+    if (creatingAccount || !form.reportValidity()) return;
+    if (accountSignedIn && !getClientToken()) {
+      setAccountSignedIn(false);
+      setError(
+        "Your session is unavailable. Enter your password to sign in again.",
+      );
+      return;
+    }
     const data = new FormData(form);
     const next = {
       name: String(data.get("client-name") ?? "").trim(),
@@ -134,24 +139,48 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
       setError("Complete all advertiser details before continuing.");
       return;
     }
+    const password = String(data.get("client-password") ?? "");
+    if (
+      !accountSignedIn &&
+      password !== String(data.get("client-password-confirm") ?? "")
+    ) {
+      setError("Passwords do not match.");
+      return;
+    }
     setClient(next);
     setError("");
-    setStep("verify");
-  }
-
-  function verifyCode(kind: "email" | "phone") {
-    const code = kind === "email" ? emailCode : phoneCode;
-    if (!/^\d{6}$/.test(code)) {
-      setError(`Enter the six-digit ${kind} preview code.`);
-      return;
+    setCreatingAccount(true);
+    let created = accountCreated;
+    try {
+      if (!created) {
+        await registerClient({
+          email: next.email,
+          phone: next.phone,
+          fullName: next.name,
+          password,
+        });
+        created = true;
+        setAccountCreated(true);
+      }
+      if (!accountSignedIn || !getClientToken()) {
+        await loginClient(next.email, password);
+        startDemoSession(next.email);
+        setAccountSignedIn(true);
+      }
+      setStep("plan");
+    } catch (failure) {
+      const message =
+        failure instanceof Error
+          ? failure.message
+          : "Could not create or sign in to your account.";
+      setError(
+        created
+          ? `Your account was created, but sign-in failed: ${message} Try again.`
+          : message,
+      );
+    } finally {
+      setCreatingAccount(false);
     }
-    if (code !== previewOtp) {
-      setError("Preview code does not match. Use the displayed preview code.");
-      return;
-    }
-    if (kind === "email") setEmailVerified(true);
-    else setPhoneVerified(true);
-    setError("");
   }
 
   function validateRegistration(): boolean {
@@ -165,8 +194,10 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
       setStep("creative");
       return false;
     }
-    if (!emailVerified || !phoneVerified) {
-      setError("Complete both preview contact checks before registering.");
+    if (!accountSignedIn || !getClientToken()) {
+      setError("Sign in to your client account before continuing.");
+      setAccountSignedIn(false);
+      setStep("client");
       return false;
     }
     if (!consent) {
@@ -571,10 +602,10 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                 <span className="registration-step-kicker">
                   02 / YOUR DETAILS
                 </span>
-                <h2>Who should we contact?</h2>
+                <h2>Advertiser details and account</h2>
                 <p>
-                  Share your details so the team can follow up about your
-                  campaign.
+                  Enter your details and create an account. Your email will be
+                  your username.
                 </p>
               </div>
               <div className="fields registration-fields">
@@ -585,7 +616,9 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                     name="client-name"
                     autoComplete="name"
                     required
+                    minLength={2}
                     maxLength={100}
+                    readOnly={accountCreated || creatingAccount}
                     defaultValue={client.name}
                   />
                 </div>
@@ -597,18 +630,20 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                     autoComplete="organization"
                     required
                     maxLength={150}
+                    readOnly={creatingAccount}
                     defaultValue={client.business}
                   />
                 </div>
                 <div className="field">
-                  <label htmlFor="client-email">Email *</label>
+                  <label htmlFor="client-email">Email (username) *</label>
                   <input
                     id="client-email"
                     name="client-email"
                     type="email"
-                    autoComplete="email"
+                    autoComplete="username"
                     required
                     maxLength={254}
+                    readOnly={accountCreated || creatingAccount}
                     defaultValue={client.email}
                   />
                 </div>
@@ -620,7 +655,10 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                     type="tel"
                     autoComplete="tel"
                     required
-                    maxLength={25}
+                    pattern="[0-9]{10,20}"
+                    title="Enter 10 to 20 digits, without spaces or a plus sign."
+                    maxLength={20}
+                    readOnly={accountCreated || creatingAccount}
                     defaultValue={client.phone}
                   />
                 </div>
@@ -631,156 +669,86 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                     name="client-area"
                     required
                     maxLength={120}
+                    readOnly={creatingAccount}
                     defaultValue={client.area}
                   />
                 </div>
+                {!accountSignedIn && (
+                  <>
+                    <div className="field">
+                      <label htmlFor="client-password">Password *</label>
+                      <input
+                        id="client-password"
+                        name="client-password"
+                        type="password"
+                        autoComplete={
+                          accountCreated ? "current-password" : "new-password"
+                        }
+                        required
+                        readOnly={creatingAccount}
+                        minLength={8}
+                        pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&amp;*]).{8,}"
+                        aria-describedby="client-password-guidance"
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="client-password-confirm">
+                        Confirm password *
+                      </label>
+                      <input
+                        id="client-password-confirm"
+                        name="client-password-confirm"
+                        type="password"
+                        autoComplete="new-password"
+                        required
+                        readOnly={creatingAccount}
+                      />
+                    </div>
+                    <p className="fine full" id="client-password-guidance">
+                      At least 8 characters, including uppercase, lowercase, a
+                      number, and one of ! @ # $ % ^ &amp; *.
+                    </p>
+                  </>
+                )}
               </div>
               <p className="registration-privacy-note">
                 <span aria-hidden="true">i</span>
-                Your information is saved locally in this browser preview only.
+                {accountCreated
+                  ? "Your account has been created."
+                  : "Continuing creates your client account immediately."}{" "}
+                Campaign details and files remain a browser-local preview.
+                Contact details are not verified.
+              </p>
+              <p className="error registration-error" role="alert">
+                {error}
+              </p>
+              <p className="fine">
+                Already have an account? <a href="login.html">Sign in</a>.
               </p>
               <div className="registration-actions">
                 <button
                   className="button ghost"
                   type="button"
                   onClick={() => setStep("creative")}
-                >
-                  Back
-                </button>
-                <button className="button yellow" type="submit">
-                  Continue
-                </button>
-              </div>
-            </form>
-          )}
-          {step === "verify" && (
-            <div className="registration-form">
-              <div className="registration-step-heading">
-                <span className="registration-step-kicker">
-                  03 / CONTACT CHECK
-                </span>
-                <h2>Preview email and mobile verification</h2>
-                <p>Check the contact details attached to your campaign.</p>
-              </div>
-              <p className="registration-disclosure" role="note">
-                <strong>Preview mode</strong>
-                No email or SMS is sent and no real contact details are
-                verified. Use the sample code shown below.
-              </p>
-              <div className="registration-verify-card">
-                <div className="registration-verify-heading">
-                  <span className="registration-verify-icon" aria-hidden="true">
-                    @
-                  </span>
-                  <div>
-                    <strong>Email address</strong>
-                    <span>{client.email}</span>
-                  </div>
-                  {emailVerified && (
-                    <span className="registration-verified">Checked</span>
-                  )}
-                </div>
-                <p className="registration-code-hint">
-                  Preview code <b>123456</b>
-                </p>
-                <label htmlFor="email-preview-code">
-                  Enter email preview code
-                </label>
-                <div className="registration-code-row">
-                  <input
-                    id="email-preview-code"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                    value={emailCode}
-                    onChange={(event) => {
-                      setEmailCode(
-                        event.target.value.replace(/\D/g, "").slice(0, 6),
-                      );
-                      setEmailVerified(false);
-                    }}
-                  />
-                  <button
-                    className="button small"
-                    type="button"
-                    onClick={() => verifyCode("email")}
-                  >
-                    {emailVerified ? "Checked" : "Verify"}
-                  </button>
-                </div>
-              </div>
-              <div className="registration-verify-card">
-                <div className="registration-verify-heading">
-                  <span className="registration-verify-icon" aria-hidden="true">
-                    #
-                  </span>
-                  <div>
-                    <strong>Mobile number</strong>
-                    <span>{client.phone}</span>
-                  </div>
-                  {phoneVerified && (
-                    <span className="registration-verified">Checked</span>
-                  )}
-                </div>
-                <p className="registration-code-hint">
-                  Preview code <b>123456</b>
-                </p>
-                <label htmlFor="phone-preview-code">
-                  Enter mobile preview code
-                </label>
-                <div className="registration-code-row">
-                  <input
-                    id="phone-preview-code"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                    value={phoneCode}
-                    onChange={(event) => {
-                      setPhoneCode(
-                        event.target.value.replace(/\D/g, "").slice(0, 6),
-                      );
-                      setPhoneVerified(false);
-                    }}
-                  />
-                  <button
-                    className="button small"
-                    type="button"
-                    onClick={() => verifyCode("phone")}
-                  >
-                    {phoneVerified ? "Checked" : "Verify"}
-                  </button>
-                </div>
-              </div>
-              <p className="error registration-error" role="alert">
-                {error}
-              </p>
-              <div className="registration-actions">
-                <button
-                  className="button ghost"
-                  type="button"
-                  onClick={() => setStep("client")}
+                  disabled={creatingAccount}
                 >
                   Back
                 </button>
                 <button
                   className="button yellow"
-                  type="button"
-                  disabled={!emailVerified || !phoneVerified}
-                  onClick={() => {
-                    setError("");
-                    setStep("plan");
-                  }}
+                  type="submit"
+                  disabled={creatingAccount}
                 >
-                  Continue
+                  {creatingAccount ? "Creating account..." : "Continue"}
                 </button>
               </div>
-            </div>
+            </form>
           )}
           {step === "plan" && (
             <div className="registration-form">
               <div className="registration-step-heading">
                 <span className="registration-step-kicker">
-                  04 / CAMPAIGN PLAN
+                  03 / CAMPAIGN PLAN
                 </span>
                 <h2>Choose your campaign plan</h2>
                 <p>
@@ -801,7 +769,7 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                 <button
                   className="button ghost"
                   type="button"
-                  onClick={() => setStep("verify")}
+                  onClick={() => setStep("client")}
                 >
                   Back
                 </button>
@@ -820,7 +788,7 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
             <form className="registration-form" onSubmit={goToPayment}>
               <div className="registration-step-heading">
                 <span className="registration-step-kicker">
-                  05 / FINAL REVIEW
+                  04 / FINAL REVIEW
                 </span>
                 <h2>Review your registration</h2>
                 <p>
@@ -879,7 +847,7 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                 />
                 <span>
                   I understand this is a browser-local preview: files are not
-                  uploaded and OTP is not genuinely verified. I agree to pay
+                  uploaded and contact details are not verified. I agree to pay
                   the plan amount, which is refunded if there is an issue with
                   the ad video or content.
                 </span>
@@ -904,7 +872,7 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
           {step === "payment" && (
             <div className="registration-form">
               <div className="registration-step-heading">
-                <span className="registration-step-kicker">06 / PAYMENT</span>
+                <span className="registration-step-kicker">05 / PAYMENT</span>
                 <h2>Pay for your campaign</h2>
                 <p>
                   Complete the payment securely with Razorpay. Your ad is

@@ -27,7 +27,10 @@ npm run preview
 
 The production output is `dist`. The preview URL is normally `http://127.0.0.1:4173`.
 The nonproduction Azure App Service workflow deploys the contents of `dist`, not
-the source HTML or TypeScript.
+the source HTML or TypeScript. Its build sets `VITE_API_BASE_URL` to the
+nonproduction Azure backend. Change this value in the workflow if the backend
+origin changes; Vite embeds it at build time. The backend must allow the
+frontend origin through CORS.
 
 ## Pages and source
 
@@ -38,7 +41,7 @@ the source HTML or TypeScript.
 | `pricing.html`        | `src/pages/Pricing.tsx`        | Video preview and illustrative calculator |
 | `register.html`       | `src/pages/Register.tsx`       | Video selection and advertiser registration |
 
-Register opens the creative onboarding form directly. Select a campaign video
+Register opens the creative onboarding form directly. The combined details and account step creates a Client account on the backend immediately, using the email as username and a password, and signs the user in. Contact details are not verified; campaign and payment preview data remain local. If an account already exists, use the login page instead. Select a campaign video
 and banner to preview them on the mock screen, then edit campaign days, requested
 cabs and plays per day directly in the campaign sidebar.
 The sidebar and Plan calculator share selections and update the price immediately.
@@ -51,7 +54,7 @@ MP4/WebM videos must be non-empty, browser-playable and at most 100 MB. Files st
 local and are cleared on refresh. The old `pricing.html#registration` URL redirects
 to `register.html`; Pricing remains a separate calculator and video-preview page.
 | `contact.html`        | `src/pages/Contact.tsx`        | Campaign handoff and local enquiry draft  |
-| `login.html`          | `src/pages/Login.tsx`          | Client phone login with a fixed demo OTP   |
+| `login.html`          | `src/pages/Login.tsx`          | Client email and password login            |
 | `dashboard.html`      | `src/pages/Dashboard.tsx`      | Sample advertiser dashboard               |
 | `profile.html`        | `src/pages/Profile.tsx`        | Sample advertiser profile                 |
 | `create-ad.html`      | `src/pages/CreateAd.tsx`       | Campaign setup and local creative preview |
@@ -113,7 +116,7 @@ it removes itself after animation and is omitted for reduced-motion preferences.
 Visible navigation and action labels use normal product terminology (Sign in,
 Sign out, Approve ad) instead of repeated demo badges. This is a presentation
 cleanup, not a backend upgrade: admin sign-in remains a browser-local demo.
-Client phone sign-in is disabled pending an SMS authentication provider. Financial, testimonial
+Client sign-in uses the backend password endpoint. Financial, testimonial
 and fictional fleet disclosures remain visible; exported reports remain
 explicitly marked as illustrative.
 Navigate
@@ -200,19 +203,17 @@ labeled sample testimonial layout. The shared desktop and mobile navigation
 contains Home, Pricing, Contact us and Log in. Footer FAQ links on all pages open
 the dedicated `faq.html` page; FAQs are no longer embedded in the home footer.
 Footer quick links contain only Login, FAQ, How it works and Contact us.
-The client login page accepts an international phone number (country code with
-no spaces). Its responsive side panel includes three campaign steps, an SVG
-Charminar/cab scene and the current per-ad rate and campaign minimums. The
-browser-local demo login generates a fixed OTP (`123456`) after phone validation.
-Entering it creates a demo session and redirects to the requested portal page;
-no SMS is sent, and this does not verify identity. The fixed OTP and session are
-not suitable for production. Live integration must generate/send and verify
-OTPs on a trusted backend or authentication provider, with expiry, rate limiting
-and secure sessions. Do not put SMS credentials or OTP verification secrets in
-frontend code.
-The previous email/password demo login has been removed; portal tests seed their
-own browser-local demo sessions independently. Existing portal storage and route
-gates are still demos, not secure authentication or protected backend data. The portal
+Client sign-in uses the registered email as the username and posts the password to
+`/api/v1/auth/client-login`. For local development, set
+`VITE_API_BASE_URL=https://localhost:7100` in `.env.development.local` and restart
+`npm run dev`. Use the backend origin only, not `/swagger/index.html`. Trust the
+backend's HTTPS development certificate (`dotnet dev-certs https --trust`) if needed.
+For other environments, set `VITE_API_BASE_URL` to their backend origin; when unset,
+requests go to the website's origin. The backend must allow the website's origin
+through CORS. An active Client account
+must already exist in the backend. Tokens are stored in session storage and cleared
+on sign-out. The portal still uses browser-local sample data and its route gate is
+not a security boundary; backend authorization must protect real data. The portal
 includes example campaign metrics and profile details, a searchable sample
 advertisement list, sample campaign detail and billing pages, and campaign
 creation tools that reuse the local video preview and illustrative budget
