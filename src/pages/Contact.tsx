@@ -19,14 +19,6 @@ export function Contact() {
             <div className="contacts">
               <article className="contact-card">
                 <span className="pending">CONTACT PENDING</span>
-                <h3>WhatsApp</h3>
-                <span className="placeholder">
-                  [Add verified WhatsApp number]
-                </span>
-                <p>For a campaign conversation and initial requirements.</p>
-              </article>
-              <article className="contact-card">
-                <span className="pending">CONTACT PENDING</span>
                 <h3>Call Adrover</h3>
                 <span className="placeholder">[Add business phone number]</span>
                 <p>Business hours: [to be confirmed].</p>
