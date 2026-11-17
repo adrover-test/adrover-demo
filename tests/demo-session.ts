@@ -11,6 +11,7 @@ export async function seedDemoSession(
       "adrover-demo-session",
       JSON.stringify({ email: identity }),
     );
+    sessionStorage.setItem("adrover-client-token", "test-token");
     const clients = JSON.parse(
       localStorage.getItem("adrover-demo-clients") ?? "[]",
     ) as string[];

@@ -467,39 +467,14 @@ test("contact rejects malformed campaign links without blocking a new draft", as
   await expect(page.locator("#incoming-campaign")).toBeHidden();
 });
 
-test("client login shows the demo OTP without sending a request or granting access before verification", async ({
-  page,
-}) => {
-  const submissions: string[] = [];
-  page.on("request", (request) => {
-    if (request.method() !== "GET") submissions.push(request.url());
-  });
+test("client login requires email and password without OTP", async ({ page }) => {
   await page.goto("login.html");
-  await expect(
-    page.getByRole("heading", { name: "Welcome back" }),
-  ).toBeVisible();
-  await expect(page.locator("#login-phone")).toHaveAttribute(
-    "autocomplete",
-    "tel",
-  );
-  await expect(page.locator("#login-otp")).toHaveAttribute(
-    "autocomplete",
-    "one-time-code",
-  );
-  await page.locator("#login-phone").fill("+919876543210");
-  await page.getByRole("button", { name: /Generate demo OTP/ }).click();
-  await expect(page).toHaveURL(/login\.html$/);
-  await expect(page.locator(".login-status")).toContainText(
-    "Demo OTP: 123456",
-  );
-  await expect(page.locator("#login-otp")).toBeEnabled();
-  await expect(
-    page.getByText("Demo sign-in; no SMS is sent", { exact: true }),
-  ).toBeVisible();
-  expect(
-    await page.evaluate(() => sessionStorage.getItem("adrover-demo-session")),
-  ).toBeNull();
-  expect(submissions).toEqual([]);
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await expect(page.locator("#login-email")).toHaveAttribute("autocomplete", "username");
+  await expect(page.locator("#login-password")).toHaveAttribute("autocomplete", "current-password");
+  await expect(page.locator("#login-otp, #login-phone")).toHaveCount(0);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  expect(await page.evaluate(() => sessionStorage.getItem("adrover-demo-session"))).toBeNull();
 });
 
 test("dashboard presents sample campaign metrics and responsive navigation", async ({

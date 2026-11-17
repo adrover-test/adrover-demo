@@ -1,33 +1,29 @@
 import { useState, type FormEvent } from "react";
 import { LoginJourney } from "../components/LoginJourney";
+import { loginClient } from "../lib/clientAuth";
 import { getDemoRedirect, startDemoSession } from "../lib/portal";
 
-const demoOtp = "123456";
-
 export function Login() {
-  const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
-  const [otpRequested, setOtpRequested] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = event.currentTarget;
-    if (!form.reportValidity()) return;
-    setOtp("");
-    setOtpRequested(true);
-    setError(`Demo OTP: ${demoOtp}. This code is shown locally; no SMS was sent.`);
-  }
-
-  function handleVerify() {
-    if (otp !== demoOtp) {
-      setError(`Incorrect demo OTP. Enter ${demoOtp} to continue.`);
-      return;
+    if (!event.currentTarget.reportValidity()) return;
+    setBusy(true);
+    setError("");
+    try {
+      const username = email.trim();
+      await loginClient(username, password);
+      startDemoSession(username);
+      window.location.assign(getDemoRedirect(window.location.search));
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Could not sign in.");
+    } finally {
+      setBusy(false);
     }
-
-    const identity = `phone-91${phone}@demo.adrover.local`;
-    startDemoSession(identity);
-    window.location.assign(getDemoRedirect(window.location.search));
   }
 
   return (
@@ -58,70 +54,37 @@ export function Login() {
 
           <form className="login-form" onSubmit={handleSubmit}>
             <div className="field">
-              <label htmlFor="login-phone">Phone number</label>
-              <div className="login-phone-input">
-                <span aria-hidden="true">+91</span>
-                <input
-                  autoComplete="tel-national"
-                  id="login-phone"
-                  name="phone"
-                  type="tel"
-                  inputMode="numeric"
-                  placeholder="9876543210"
-                  pattern="[0-9]{10}"
-                  maxLength={10}
-                  value={phone}
-                  onChange={(event) => {
-                    setPhone(event.target.value.replace(/\D/g, "").slice(0, 10));
-                    setOtp("");
-                    setOtpRequested(false);
-                    setError("");
-                  }}
-                  aria-describedby="login-phone-guidance"
-                  required
-                />
-              </div>
-              <p className="fine" id="login-phone-guidance">
-                Country code +91 is fixed. Enter your 10-digit phone number.
-              </p>
+              <label htmlFor="login-email">Email address</label>
+              <input
+                autoComplete="username"
+                id="login-email"
+                name="email"
+                type="email"
+                value={email}
+                onChange={(event) => { setEmail(event.target.value); setError(""); }}
+                required
+              />
             </div>
 
             <div className="field">
-              <label htmlFor="login-otp">One-time password (OTP)</label>
+              <label htmlFor="login-password">Password</label>
               <input
-                autoComplete="one-time-code"
-                id="login-otp"
-                name="otp"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]{6}"
-                maxLength={6}
-                placeholder="6-digit OTP"
-                aria-describedby="login-availability"
-                value={otp}
-                onChange={(event) => {
-                  setOtp(event.target.value);
-                  setError("");
-                }}
-                disabled={!otpRequested}
+                autoComplete="current-password"
+                id="login-password"
+                name="password"
+                type="password"
+                value={password}
+                onChange={(event) => { setPassword(event.target.value); setError(""); }}
+                required
               />
             </div>
 
             <div className="login-options">
-              <span className="fine">Demo sign-in; no SMS is sent</span>
               <a href="contact.html#launch-notes">Need help signing in?</a>
             </div>
 
-            <button className="button yellow login-submit" type="submit">
-              Generate demo OTP
-            </button>
-            <button
-              className="button ghost login-submit"
-              type="button"
-              onClick={handleVerify}
-              disabled={!otpRequested || otp.length !== 6}
-            >
-              Verify demo OTP and sign in
+            <button className="button yellow login-submit" type="submit" disabled={busy}>
+              {busy ? "Signing in..." : "Sign in"}
             </button>
             <p aria-live="polite" className="login-status" role="alert">
               {error}
@@ -133,10 +96,8 @@ export function Login() {
             <a href="pricing.html#planner">Plan a campaign</a>
           </div>
 
-          <p className="login-disclaimer" id="login-availability">
-            Demo only: use OTP 123456 to sign in. The code is fixed in the
-            browser, no SMS is sent, and this does not verify your identity.
-            Production sign-in requires server-side OTP verification.
+          <p className="login-disclaimer">
+            Use the email address and password for your client account.
           </p>
           <a className="text-link" href="driver-login.html">
             Driver sign in

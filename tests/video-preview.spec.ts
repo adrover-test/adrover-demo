@@ -4,6 +4,33 @@ test("Register opens the creative form directly with local video playback", asyn
   page,
   isMobile,
 }) => {
+  const requests: { endpoint: string; body: unknown }[] = [];
+  let loginAttempts = 0;
+  let registerAttempts = 0;
+  await page.route("**/api/v1/auth/*", async (route) => {
+    const endpoint = new URL(route.request().url()).pathname;
+    requests.push({ endpoint, body: route.request().postDataJSON() });
+    if (endpoint.endsWith("/register") && ++registerAttempts === 1) {
+      await route.fulfill({
+        status: 422,
+        json: { error: { message: "Registration unavailable" } },
+      });
+    } else if (endpoint.endsWith("/register")) {
+      await route.fulfill({ json: { success: true } });
+    } else if (++loginAttempts === 1) {
+      await route.fulfill({
+        status: 503,
+        json: { error: { message: "Sign-in temporarily unavailable" } },
+      });
+    } else {
+      await route.fulfill({
+        json: {
+          success: true,
+          data: { accessToken: "client-token", refreshToken: "refresh-token" },
+        },
+      });
+    }
+  });
   await page.goto("pricing.html");
   if (isMobile) await page.getByLabel("Open navigation").click();
   await page
@@ -22,8 +49,8 @@ test("Register opens the creative form directly with local video playback", asyn
   ).toHaveClass("registration-summary-total");
   await expect(page.locator("#summary-price")).toHaveCSS("font-size", "24px");
   await page.locator("#summary-days").fill("14");
-  await page.locator("#summary-cabs").fill("15");
-  await expect(page.locator("#summary-price")).toHaveText("₹3,150");
+  await page.locator("#summary-cabs").selectOption("20");
+  await expect(page.locator("#summary-price")).toHaveText("₹4,200");
   const input = page.locator("#registration-video");
   await input.setInputFiles({
     name: "notes.txt",
@@ -94,39 +121,77 @@ test("Register opens the creative form directly with local video playback", asyn
     .getByRole("button", { name: /Continue to advertiser details/ })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Who should we contact?" }),
+    page.getByRole("heading", { name: "Advertiser details and account" }),
   ).toBeVisible();
+  await expect(page.getByText("Step 2 of 5")).toBeVisible();
+  await expect(
+    page.locator("#email-preview-code, #phone-preview-code"),
+  ).toHaveCount(0);
   await page.getByLabel("Full name *").fill("Test Advertiser");
   await page.getByLabel("Business / brand *").fill("Test Brand");
-  await page.getByLabel("Email *").fill("advertiser@example.com");
-  await page.getByLabel("Mobile number *").fill("+919876543210");
+  await page.getByLabel("Email (username) *").fill("advertiser@example.com");
+  await page.getByLabel("Mobile number *").fill("919876543210");
+  await page.getByLabel("Password *", { exact: true }).fill("weakpass");
+  await page.getByLabel("Confirm password *").fill("weakpass");
   await page.getByRole("button", { name: /Continue/ }).click();
-  await page.getByLabel("Enter email preview code").fill("123456");
-  await page
-    .locator(".registration-verify-card")
-    .nth(0)
-    .getByRole("button", { name: /^Verify/ })
-    .click();
-  await page.getByLabel("Enter mobile preview code").fill("123456");
-  await page
-    .locator(".registration-verify-card")
-    .nth(1)
-    .getByRole("button", { name: /^Verify/ })
-    .click();
+  expect(
+    await page
+      .locator("#client-password")
+      .evaluate((input: HTMLInputElement) => input.validity.patternMismatch),
+  ).toBe(true);
+  expect(requests).toHaveLength(0);
+  await page.getByLabel("Password *", { exact: true }).fill("StrongPass1!");
+  await page.getByLabel("Confirm password *").fill("OtherPass1!");
   await page.getByRole("button", { name: /Continue/ }).click();
-  await expect(page.locator("#total-cost")).toHaveText("₹3,150");
-  await expect(page.locator("#daily-play-count")).toHaveValue("50");
-  await expect(page.locator("#vehicle-count")).toHaveValue("15");
-  await page.locator("#vehicle-count").fill("12");
+  await expect(page.locator(".registration-error")).toContainText(
+    "Passwords do not match",
+  );
+  expect(requests).toHaveLength(0);
+  await page.getByLabel("Confirm password *").fill("StrongPass1!");
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await expect(page.locator(".registration-error")).toContainText(
+    "Registration unavailable",
+  );
+  expect(requests).toHaveLength(1);
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await expect(page.locator(".registration-error")).toContainText(
+    "Sign-in temporarily unavailable",
+  );
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Choose your campaign plan" }),
+  ).toBeVisible();
+  expect(requests.map((request) => request.endpoint)).toEqual([
+    "/api/v1/auth/register",
+    "/api/v1/auth/register",
+    "/api/v1/auth/client-login",
+    "/api/v1/auth/client-login",
+  ]);
+  expect(requests[0].body).toEqual({
+    email: "advertiser@example.com",
+    phone: "919876543210",
+    fullName: "Test Advertiser",
+    password: "StrongPass1!",
+    role: "Client",
+  });
+  await page.getByRole("button", { name: "Back" }).click();
+  await expect(page.getByLabel("Email (username) *")).toHaveAttribute(
+    "readonly",
+    "",
+  );
+  await page.getByRole("button", { name: /Continue/ }).click();
+  expect(requests).toHaveLength(4);
+  await expect(page.locator("#total-cost")).toHaveText("₹4,200");
+  await expect(page.locator("#daily-play-count")).toHaveValue("1000");
+  await expect(page.locator("#vehicle-count")).toHaveValue("20");
+  await page.locator("#vehicle-count").selectOption("30");
   await page.locator("#daily-play-count").fill("2500");
   await page.locator("#campaign-days").fill("21");
-  await expect(page.locator("#total-cost")).toHaveText("₹1,89,000");
-  await expect(page.locator(".registration-summary-details")).toContainText(
-    "21 days",
-  );
+  await expect(page.locator("#total-cost")).toHaveText("₹15,750");
+  await expect(page.locator("#summary-days")).toHaveValue("21");
   await expect(page.locator("#summary-daily-plays")).toHaveValue("2500");
   await expect(page.locator(".registration-summary-details")).toContainText(
-    "6,30,000",
+    "52,500",
   );
   await page.locator("#daily-play-count").fill("0");
   await expect(page.getByRole("button", { name: /^Continue/ })).toBeDisabled();
@@ -136,17 +201,18 @@ test("Register opens the creative form directly with local video playback", asyn
     page.getByRole("heading", { name: "Review your registration" }),
   ).toBeVisible();
   await expect(page.locator(".registration-form")).toContainText(
-    "12 cabs × 21 days × 2,500 plays per cab per day = 6,30,000 estimated",
+    "2,500 plays per day × 21 days = 52,500 estimated",
   );
-  await expect(page.locator(".registration-form")).toContainText("₹1,89,000");
+  await expect(page.locator(".registration-form")).toContainText("₹15,750");
   await page.getByLabel(/I understand this is a browser-local preview/).check();
-  await page.getByRole("button", { name: /Submit for review/ }).click();
-  await expect(page.getByRole("dialog")).toContainText("₹1,89,000");
+  await page.getByRole("button", { name: /Continue to payment/ }).click();
+  await page.getByRole("button", { name: /Pay ₹15,750/ }).click();
+  await expect(page.getByRole("dialog")).toContainText("₹15,750");
   const saved = await page.evaluate(() =>
     JSON.parse(localStorage.getItem("adrover-demo-advertisements") ?? "[]"),
   );
-  expect(saved[0]).toMatchObject({ target: 630000, totalDays: 21 });
-  expect(saved[0].note).toContain("₹1,89,000");
+  expect(saved[0]).toMatchObject({ target: 52500, totalDays: 21 });
+  expect(saved[0].note).toContain("₹15,750");
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth > innerWidth,

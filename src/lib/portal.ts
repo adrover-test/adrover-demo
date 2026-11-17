@@ -1,4 +1,5 @@
 import { advertisementSamples, type Advertisement } from "./advertisements";
+import { clearClientTokens, getClientToken } from "./clientAuth";
 
 const demoSessionKey = "adrover-demo-session";
 const savedAdvertisementsKey = "adrover-demo-advertisements";
@@ -242,11 +243,12 @@ export function approveAdvertisement(
 
 export function endDemoSession() {
   sessionStorage.removeItem(demoSessionKey);
+  clearClientTokens();
 }
 
 export function isDemoSessionActive() {
   const session = sessionStorage.getItem(demoSessionKey);
-  if (!session) return false;
+  if (!session || !getClientToken()) return false;
   const value: unknown = JSON.parse(session);
   return (
     typeof value === "object" &&
