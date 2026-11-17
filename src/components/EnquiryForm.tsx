@@ -1,7 +1,65 @@
 import { useState, type FormEvent } from "react";
 import { campaignDescription, readCampaign } from "../lib/campaign";
-import { requestDownload } from "../lib/download";
 import { saveDemoEnquiry } from "../lib/portal";
+
+const enquiryApiBaseUrl = (
+  import.meta.env.VITE_API_BASE_URL ?? "https://localhost:7100"
+)
+  .trim()
+  .replace(/\/$/, "");
+const enquiryApiPath = "/api/inquiries";
+
+type EnquiryRequest = {
+  name: string;
+  business: string;
+  email: string;
+  phone: string;
+  goal: string;
+  message: string;
+  format: string;
+};
+
+async function sendEnquiry(payload: EnquiryRequest) {
+  let response: Response;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  try {
+    response = await fetch(`${enquiryApiBaseUrl}${enquiryApiPath}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new Error("Unable to reach the enquiry service. Please try again.");
+  }
+
+  if (response.ok) return;
+
+  let message = "The enquiry could not be sent.";
+  const responseText = await response.text();
+  if (responseText.trim()) {
+    try {
+      const result: unknown = JSON.parse(responseText);
+      if (
+        typeof result === "object" &&
+        result !== null &&
+        "message" in result &&
+        typeof result.message === "string" &&
+        result.message.trim()
+      ) {
+        message = result.message;
+      } else {
+        message = responseText;
+      }
+    } catch {
+      message = responseText;
+    }
+  }
+
+  throw new Error(message);
+}
 
 export function EnquiryForm() {
   const [incoming] = useState(() => readCampaign(window.location.search));
@@ -9,8 +67,9 @@ export function EnquiryForm() {
   const format = estimate?.type ?? "Cabs";
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [isSending, setIsSending] = useState(false);
 
-  function saveDraft(event: FormEvent<HTMLFormElement>) {
+  async function saveDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     if (!form.reportValidity()) return;
@@ -23,6 +82,7 @@ export function EnquiryForm() {
       return;
     }
     setError("");
+    setStatus("");
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
     if (
       submitter instanceof HTMLButtonElement &&
@@ -52,40 +112,36 @@ export function EnquiryForm() {
       }
       return;
     }
-    const brief = [
-      "ADROVER / CAMPAIGN ENQUIRY DRAFT",
-      `Name: ${name}`,
-      `Business: ${business}`,
-      `Email: ${value("email")}`,
-      `Phone: ${value("phone") || "Not provided"}`,
-      `Objective: ${value("goal")}`,
-      `Interior screen format: ${format}`,
-      "Service city: Hyderabad",
-      "",
-      estimate
-        ? `ILLUSTRATIVE PLAN: ${campaignDescription(estimate)} This is not a quote.`
-        : "Campaign scope and budget: to be discussed.",
-      "",
-      `Requirements: ${value("message") || "To be discussed"}`,
-      "",
-      "Please confirm availability, technical requirements, tax,",
-      "commercial terms, delivery assumptions and final quotation.",
-      "",
-      "LOCAL PREVIEW DRAFT. Nothing has been submitted or sent.",
-      "Use only verified Adrover contact channels once provided.",
-    ].join("\n");
-    requestDownload("Adrover-enquiry-draft.txt", brief);
-    setStatus("Draft download requested. Nothing has been sent to Adrover.");
+
+    setIsSending(true);
+    try {
+      await sendEnquiry({
+        name,
+        business,
+        email: value("email"),
+        phone: value("phone"),
+        goal: value("goal"),
+        message: value("message"),
+        format,
+      });
+      form.reset();
+      setStatus("Enquiry sent successfully.");
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "The enquiry could not be sent.",
+      );
+    } finally {
+      setIsSending(false);
+    }
   }
 
   return (
     <form className="enquiry-form" id="enquiry-form" onSubmit={saveDraft}>
       <div className="eyebrow">Prepare your campaign enquiry</div>
       <h2>Start with the essentials.</h2>
-      <p className="fine">
-        Download a local draft or save an enquiry for the website admin in this
-        browser. Nothing is sent to a server.
-      </p>
+      <p className="fine">Send your enquiry directly to the Adrover API.</p>
       <div id="incoming-campaign" className="summary-box" hidden={!estimate}>
         {estimate &&
           `From your illustrative estimate: ${campaignDescription(estimate)} Format: ${format}. Not a quote.`}
@@ -166,8 +222,8 @@ export function EnquiryForm() {
           />
         </div>
       </div>
-      <button className="button" type="submit">
-        Send My Enquiry
+      <button className="button" type="submit" disabled={isSending}>
+        {isSending ? "Sending..." : "Send My Enquiry"}
       </button>
 
       <p className="error" role="alert">
@@ -180,10 +236,6 @@ export function EnquiryForm() {
         aria-live="polite"
       >
         {status}
-      </p>
-      <p className="fine">
-        Nothing is sent. Live enquiry delivery can be enabled only after
-        verified contact details and the privacy process are finalized.
       </p>
     </form>
   );
