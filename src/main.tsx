@@ -11,7 +11,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { Profile } from "./pages/Profile";
 import { CreateAd } from "./pages/CreateAd";
 import { Advertisements } from "./pages/Advertisements";
-import { ViewAd } from "./pages/ViewAd";
+import { ClientViewAd } from "./pages/ClientViewAd";
 import { Payments } from "./pages/Payments";
 import { requireDemoSession } from "./lib/portal";
 import { requireAdminSession } from "./lib/admin";
@@ -30,7 +30,7 @@ const pages = {
   "profile.html": Profile,
   "create-ad.html": CreateAd,
   "advertisements.html": Advertisements,
-  "view-ad.html": ViewAd,
+  "view-ad.html": ClientViewAd,
   "payments.html": Payments,
   "admin-login.html": AdminLogin,
   "admin.html": AdminPortal,

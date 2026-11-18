@@ -1,5 +1,5 @@
 export type AdvertisementStatus =
-  "Active" | "Pending approval" | "Approved" | "Completed";
+  "Active" | "Pending approval" | "Approved" | "Completed" | "Draft" | "Rejected" | "Cancelled";
 
 export type Advertisement = {
   id: string;

@@ -83,7 +83,9 @@ export function Layout({
                   ? "Driver portal"
                   : "Advertiser portal"}
             </span>
-            <a href="index.html">View public website</a>
+            <a className="portal-home-link" href="index.html">
+              <span aria-hidden="true">←</span> Back to homepage
+            </a>
             <a
               className="portal-exit"
               href={

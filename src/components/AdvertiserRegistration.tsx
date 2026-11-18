@@ -1,10 +1,12 @@
-import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
-import type { Advertisement } from "../lib/advertisements";
 import {
-  startDemoSession,
-  saveProfile,
-  saveAdvertisement,
-} from "../lib/portal";
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+} from "react";
+import { getDashboardDraftUrl, startDemoSession } from "../lib/portal";
 import {
   cabCountOptions,
   calculate,
@@ -15,9 +17,15 @@ import {
   moneyFormat,
   numberFormat,
 } from "../lib/campaign";
-import { payWithRazorpay, razorpayConfigured } from "../lib/razorpay";
-import { saveAdVideo } from "../lib/adVideos";
+import { payForCampaign } from "../lib/campaignPaymentApi";
 import { getClientToken, loginClient, registerClient } from "../lib/clientAuth";
+import {
+  getRegistrationDraft,
+  saveRegistrationDraft,
+  type RegistrationProgress,
+  uploadAdvertisementVideo,
+  uploadAdvertisementImage,
+} from "../lib/advertisementApi";
 import { CampaignPlanner, defaultCampaignSelection } from "./CampaignPlanner";
 
 type Step = "creative" | "client" | "plan" | "review" | "payment";
@@ -30,7 +38,28 @@ const steps: { id: Step; label: string }[] = [
   { id: "payment", label: "Payment" },
 ];
 
-export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
+const setupSteps = steps.filter(({ id }) => id !== "client");
+
+function serializeProgress(value: RegistrationProgress) {
+  return JSON.stringify(value, Object.keys(value).sort());
+}
+
+export function AdvertiserRegistration({
+  onBack,
+  draftId,
+  onDismiss,
+}: {
+  onBack: () => void;
+  draftId?: string;
+  onDismiss?: () => void;
+}) {
+  const inDashboard = Boolean(onDismiss);
+  const visibleSteps = inDashboard ? setupSteps : steps;
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [closing, setClosing] = useState(false);
+  const [closeError, setCloseError] = useState("");
+  const [advancing, setAdvancing] = useState(false);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoDetails, setVideoDetails] = useState("");
   const [videoError, setVideoError] = useState("");
@@ -62,7 +91,212 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [paying, setPaying] = useState(false);
-  const [paymentId, setPaymentId] = useState("");
+  const [paymentStarted, setPaymentStarted] = useState(false);
+  const [loadingDraft, setLoadingDraft] = useState(Boolean(draftId));
+  const [startDate, setStartDate] = useState("");
+  const [videoDuration, setVideoDuration] = useState<number | null>(null);
+  const [campaignId, setCampaignId] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [videoUploaded, setVideoUploaded] = useState(false);
+  const [assetsUploaded, setAssetsUploaded] = useState(false);
+  const newDraftId = useRef(crypto.randomUUID());
+  const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const saveTimer = useRef<number | undefined>(undefined);
+  const lastSaved = useRef("");
+  const resumeAfterCreative = useRef<RegistrationProgress["step"]>("plan");
+  const [saveStatus, setSaveStatus] = useState("");
+
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    dialog.showModal();
+    return () => {
+      if (dialog.open) dialog.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    body.scrollTop = 0;
+    if (!loadingDraft)
+      body
+        .querySelector<HTMLElement>(
+          ".registration-step-heading h2, .campaign-setup-complete h3",
+        )
+        ?.focus();
+  }, [step, loadingDraft, success]);
+
+  useEffect(() => {
+    if (!draftId) return;
+    if (!getClientToken()) {
+      window.location.replace(
+        `login.html?next=${encodeURIComponent(getDashboardDraftUrl(draftId))}`,
+      );
+      return;
+    }
+    let cancelled = false;
+    getRegistrationDraft(draftId)
+      .then((draft) => {
+        if (cancelled) return;
+        const p = draft.progress;
+        lastSaved.current = serializeProgress(p);
+        resumeAfterCreative.current = p.step;
+        setCampaignId(draft.id);
+        setAdName(p.name);
+        setClient((previous) => ({
+          ...previous,
+          business: p.brand,
+          area: p.targetArea,
+        }));
+        setSelection({
+          vehicles: p.cabs,
+          days: p.days,
+          dailyPlays: p.dailyPlays,
+        });
+        setVideoDuration(p.videoDurationSeconds);
+        setVideoDetails(draft.hasVideo ? "Video already uploaded" : "");
+        setVideoUploaded(draft.hasVideo);
+        setAssetsUploaded(draft.hasBanner);
+        setAccountSignedIn(true);
+        setAccountCreated(true);
+        setConsent(p.consent);
+        setStartDate(p.startDate);
+        setPaymentStarted(draft.paymentStarted);
+        setStep(
+          !draft.hasVideo || !draft.hasBanner
+            ? "creative"
+            : draft.paymentStarted
+              ? "payment"
+              : p.step,
+        );
+        setSuccess(draft.paidAmount > 0);
+        setSaveStatus("Draft restored from your account.");
+      })
+      .catch((failure) => {
+        if (!cancelled)
+          setError(
+            failure instanceof Error
+              ? failure.message
+              : "Could not load campaign draft.",
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDraft(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [draftId]);
+
+  const progress: RegistrationProgress = {
+    id: campaignId,
+    name: adName.trim(),
+    brand: client.business,
+    targetArea: client.area,
+    videoDurationSeconds: videoDuration ?? 0,
+    days: selection.days,
+    dailyPlays: selection.dailyPlays,
+    cabs: selection.vehicles,
+    startDate,
+    consent,
+    step:
+      step === "creative"
+        ? resumeAfterCreative.current
+        : step === "client"
+          ? "plan"
+          : step,
+  };
+  const serializedProgress = serializeProgress(progress);
+  const canSave = Boolean(
+    campaignId &&
+    accountSignedIn &&
+    !loadingDraft &&
+    !paymentStarted &&
+    !success,
+  );
+  const busy = uploading || paying || advancing || closing;
+
+  async function dismiss() {
+    if (!onDismiss || busy) return;
+    setClosing(true);
+    setCloseError("");
+    window.clearTimeout(saveTimer.current);
+    try {
+      await saveQueue.current.catch(() => {
+        // Retry the latest snapshot below if the queued save failed.
+      });
+      if (canSave && serializedProgress !== lastSaved.current)
+        await persistDraft(progress);
+      dialogRef.current?.close();
+      onDismiss();
+    } catch (failure) {
+      setCloseError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not save your changes.",
+      );
+      setClosing(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!inDashboard) return;
+    function warnBeforeLeaving(event: BeforeUnloadEvent) {
+      if (busy || (canSave && serializedProgress !== lastSaved.current)) {
+        event.preventDefault();
+        event.returnValue = true;
+      }
+    }
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [inDashboard, busy, canSave, serializedProgress]);
+
+  function persistDraft(value: RegistrationProgress) {
+    setSaveStatus("Saving draft...");
+    const operation = saveQueue.current.then(
+      () => saveRegistrationDraft(value),
+      () => saveRegistrationDraft(value),
+    );
+    const saved = operation.then((draft) => {
+      lastSaved.current = serializeProgress(value);
+      setSaveStatus(
+        "Draft saved to your account. You can sign in later to continue.",
+      );
+      return draft;
+    });
+    saveQueue.current = saved;
+    return saved;
+  }
+
+  useEffect(() => {
+    if (
+      !canSave ||
+      busy ||
+      creatingAccount ||
+      step === "creative" ||
+      step === "client"
+    )
+      return;
+    const value: RegistrationProgress = JSON.parse(serializedProgress);
+    saveTimer.current = window.setTimeout(() => {
+      void saveQueue.current
+        .catch(() => undefined)
+        .then(() => {
+          if (serializedProgress !== lastSaved.current)
+            return persistDraft(value);
+        })
+        .catch((failure) => {
+          setSaveStatus("Draft changes were not saved.");
+          setError(
+            failure instanceof Error
+              ? failure.message
+              : "Could not save your draft. Try saving again.",
+          );
+        });
+    }, 500);
+    return () => window.clearTimeout(saveTimer.current);
+  }, [serializedProgress, canSave, busy, creatingAccount, step]);
 
   useEffect(() => {
     if (!videoFile) {
@@ -77,6 +311,7 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
   function selectVideo(file?: File) {
     setVideoFile(null);
     setVideoDetails("");
+    setVideoDuration(null);
     setVideoError("");
     if (!file) return;
     if (!["video/mp4", "video/webm"].includes(file.type)) {
@@ -147,10 +382,17 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
       setError("Passwords do not match.");
       return;
     }
+    if (!videoFile || !banner || !videoDuration || !plan) {
+      setError(
+        "Choose a playable video, banner and valid plan before creating your account.",
+      );
+      return;
+    }
     setClient(next);
     setError("");
     setCreatingAccount(true);
     let created = accountCreated;
+    const id = campaignId || newDraftId.current;
     try {
       if (!created) {
         await registerClient({
@@ -158,15 +400,28 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
           phone: next.phone,
           fullName: next.name,
           password,
+          advertisement: {
+            ...progress,
+            id,
+            brand: next.business,
+            targetArea: next.area,
+          },
         });
         created = true;
         setAccountCreated(true);
+        setCampaignId(id);
       }
       if (!accountSignedIn || !getClientToken()) {
         await loginClient(next.email, password);
         startDemoSession(next.email);
         setAccountSignedIn(true);
       }
+      window.history.replaceState(
+        null,
+        "",
+        `register.html?draft=${encodeURIComponent(id)}`,
+      );
+      await uploadDraftAssets(id);
       setStep("plan");
     } catch (failure) {
       const message =
@@ -175,7 +430,7 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
           : "Could not create or sign in to your account.";
       setError(
         created
-          ? `Your account was created, but sign-in failed: ${message} Try again.`
+          ? `Your account and campaign draft are saved. ${message} Retry here, or sign in later to continue setup.`
           : message,
       );
     } finally {
@@ -189,132 +444,155 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
       setStep("plan");
       return false;
     }
-    if (!videoFile || !videoDetails || videoError) {
-      setError("Choose a playable video before registering.");
+    if (
+      (!videoFile && !videoUploaded) ||
+      !videoDetails ||
+      !videoDuration ||
+      videoError
+    ) {
+      setError(
+        "Choose a playable video with a readable duration before registering.",
+      );
       setStep("creative");
       return false;
     }
     if (!accountSignedIn || !getClientToken()) {
       setError("Sign in to your client account before continuing.");
       setAccountSignedIn(false);
-      setStep("client");
+      if (!inDashboard) setStep("client");
+      return false;
+    }
+    if (
+      (!banner && !assetsUploaded) ||
+      !startDate ||
+      !Number.isFinite(Date.parse(startDate))
+    ) {
+      setError("Choose a banner and campaign start date before continuing.");
       return false;
     }
     if (!consent) {
-      setError(
-        "Confirm that you understand the preview limits and refund terms.",
-      );
+      setError("Confirm the upload and payment terms before continuing.");
       return false;
     }
     return true;
   }
 
-  function goToPayment(event: FormEvent<HTMLFormElement>) {
+  async function uploadDraftAssets(id: string) {
+    setUploading(true);
+    try {
+      const draft = await getRegistrationDraft(id);
+      if (!draft.hasVideo) {
+        if (!videoFile)
+          throw new Error("Select the video to finish its interrupted upload.");
+        await uploadAdvertisementVideo(id, videoFile);
+      }
+      setVideoUploaded(true);
+      if (!draft.hasBanner) {
+        if (!banner)
+          throw new Error(
+            "Select the banner to finish its interrupted upload.",
+          );
+        await uploadAdvertisementImage(id, banner);
+      }
+      setAssetsUploaded(true);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function goToPayment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!validateRegistration()) return;
+    if (
+      busy ||
+      !event.currentTarget.reportValidity() ||
+      !validateRegistration() ||
+      !campaignId
+    )
+      return;
     setError("");
-    setStep("payment");
+    setAdvancing(true);
+    window.clearTimeout(saveTimer.current);
+    try {
+      if (!paymentStarted) await persistDraft({ ...progress, step: "payment" });
+      setStep("payment");
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not save your registration.",
+      );
+    } finally {
+      setAdvancing(false);
+    }
   }
 
   async function pay() {
-    if (!plan || paying || !validateRegistration()) return;
+    if (
+      !plan ||
+      busy ||
+      !campaignId ||
+      !assetsUploaded ||
+      !videoUploaded ||
+      !validateRegistration()
+    )
+      return;
     setError("");
     setPaying(true);
+    window.clearTimeout(saveTimer.current);
     try {
-      const result = await payWithRazorpay({
-        amountInr: plan.cost,
-        description: `Adrover campaign: ${adName.trim()}`,
-        customer: {
-          name: client.name,
-          email: client.email,
-          contact: client.phone,
-        },
-        reference: adName.trim(),
-      });
-      if (result.status === "cancelled") {
-        setError("Payment was cancelled. You have not been charged.");
-        return;
+      if (!paymentStarted) await persistDraft({ ...progress, step: "payment" });
+      setPaymentStarted(true);
+      const result = await payForCampaign(
+        campaignId,
+        plan.cost,
+        inDashboard
+          ? (open) => {
+              // Razorpay mounts outside the native dialog, so it needs the top layer to itself.
+              const dialog = dialogRef.current;
+              if (open && dialog?.open) dialog.close();
+              if (!open && dialog?.isConnected && !dialog.open)
+                dialog.showModal();
+            }
+          : undefined,
+      );
+      if (result === "completed") {
+        setSuccess(true);
+      } else {
+        setError(
+          result === "processing"
+            ? "Your payment is processing. Check payment status here later; do not make a separate payment."
+            : "Checkout closed. Your draft is saved. Check payment status before retrying.",
+        );
       }
-      completeRegistration(result.paymentId);
-    } catch (paymentError) {
+    } catch (failure) {
       setError(
-        paymentError instanceof Error
-          ? paymentError.message
-          : "The payment could not be completed.",
+        failure instanceof Error
+          ? failure.message
+          : "Could not confirm payment. Check status before retrying.",
       );
     } finally {
       setPaying(false);
     }
   }
 
-  function completeRegistration(razorpayPaymentId: string) {
-    if (!plan || !videoFile) return;
-    const today = new Date();
-    const advertisement: Advertisement = {
-      id: crypto.randomUUID(),
-      ownerEmail: client.email,
-      name: adName.trim(),
-      brand: client.business,
-      initials:
-        client.business
-          .split(/\s+/)
-          .filter(Boolean)
-          .slice(0, 2)
-          .map((word) => word[0].toUpperCase())
-          .join("") || "AD",
-      area: client.area,
-      submitted: today.toISOString().slice(0, 10),
-      dates: "Start date pending approval",
-      status: "Pending approval",
-      plays: 0,
-      target: plan.plays,
-      elapsedDays: 0,
-      totalDays: plan.days,
-      cabs: 0,
-      fleet: "Fleet allocation pending review",
-      note: `Campaign plan: ${campaignDescription(plan)} Requested cabs: ${plan.vehicles}. Video: ${videoFile.name} (${videoDetails}). Banner: ${banner?.name ?? "Not provided"}. Payment ${razorpayPaymentId} received; refunded if there is an issue with the ad video or content.`,
-      payment: {
-        id: razorpayPaymentId,
-        amount: plan.cost,
-        paidAt: today.toISOString(),
-      },
-    };
-    try {
-      startDemoSession(client.email);
-      saveProfile({
-        accountName: client.name,
-        businessName: client.business,
-        email: client.email,
-        phone: client.phone,
-        area: client.area,
-        advertiserType: "Business",
-      });
-      saveAdvertisement(advertisement);
-      void saveAdVideo(advertisement.id, videoFile).catch(() => undefined);
-      setError("");
-      setPaymentId(razorpayPaymentId);
-      setSuccess(true);
-    } catch (saveError) {
-      setError(
-        saveError instanceof Error
-          ? saveError.message
-          : "The registration could not be saved in this browser.",
-      );
-    }
-  }
+  const activeIndex = visibleSteps.findIndex((entry) => entry.id === step);
 
-  const activeIndex = steps.findIndex((entry) => entry.id === step);
-
-  return (
+  const wizard = (
     <section
-      className="wrap registration-wizard"
-      aria-label="Advertiser registration"
+      className={
+        inDashboard ? "registration-wizard" : "wrap registration-wizard"
+      }
+      aria-label={
+        inDashboard ? "Campaign setup steps" : "Advertiser registration"
+      }
     >
       <div className="registration-progress">
         <div className="registration-progress-heading">
-          <span className="eyebrow">ADVERTISER ONBOARDING</span>
+          <span className="eyebrow">
+            {inDashboard ? "CAMPAIGN PROGRESS" : "ADVERTISER ONBOARDING"}
+          </span>
           <strong>
-            Step {activeIndex + 1} of {steps.length}
+            Step {activeIndex + 1} of {visibleSteps.length}
           </strong>
         </div>
         <div
@@ -322,7 +600,7 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
           aria-hidden="true"
           style={
             {
-              "--road-progress": `${((activeIndex + 0.5) / steps.length) * 100}%`,
+              "--road-progress": `${((activeIndex + 0.5) / visibleSteps.length) * 100}%`,
             } as CSSProperties
           }
         >
@@ -363,8 +641,11 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
             </svg>
           </span>
         </div>
-        <ol className="registration-steps" aria-label="Registration steps">
-          {steps.map((entry, index) => (
+        <ol
+          className="registration-steps"
+          aria-label={inDashboard ? "Campaign stages" : "Registration steps"}
+        >
+          {visibleSteps.map((entry, index) => (
             <li
               key={entry.id}
               className={[
@@ -384,15 +665,46 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
         </ol>
       </div>
       <div className="registration-layout">
-        <main className="dashboard-panel registration-panel">
+        <div className="dashboard-panel registration-panel">
+          {campaignId && (
+            <p
+              className="registration-save-status visually-hidden"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {saveStatus}
+            </p>
+          )}
           {step === "creative" && (
             <form
               className="registration-form"
-              onSubmit={(event) => {
+              onSubmit={async (event) => {
                 event.preventDefault();
-                if (adName.trim() && banner && videoDetails && !videoError) {
+                if (uploading) return;
+                if (
+                  adName.trim() &&
+                  (banner || assetsUploaded) &&
+                  videoDetails &&
+                  !videoError
+                ) {
                   setError("");
-                  setStep("client");
+                  if (campaignId) {
+                    try {
+                      await uploadDraftAssets(campaignId);
+                      setStep(
+                        inDashboard ? resumeAfterCreative.current : "plan",
+                      );
+                    } catch (failure) {
+                      setError(
+                        failure instanceof Error
+                          ? failure.message
+                          : "Could not upload the missing files.",
+                      );
+                    }
+                  } else {
+                    setStep("client");
+                  }
                 } else {
                   setError(
                     "Enter an ad name, choose a banner and a playable video.",
@@ -402,7 +714,11 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
             >
               <div className="registration-step-heading">
                 <span className="registration-step-kicker">01 / CREATIVE</span>
-                <h2>Name your ad and add a banner</h2>
+                <h2 tabIndex={inDashboard ? -1 : undefined}>
+                  {inDashboard
+                    ? "Campaign creative"
+                    : "Name your ad and add a banner"}
+                </h2>
                 <p>
                   Start with a campaign name and the artwork you want passengers
                   to see.
@@ -417,6 +733,7 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                     <input
                       id="registration-ad-name"
                       value={adName}
+                      readOnly={paymentStarted}
                       maxLength={100}
                       required
                       placeholder="For example, Summer launch"
@@ -453,7 +770,8 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                         id="registration-banner"
                         type="file"
                         accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
-                        required={!banner}
+                        required={!banner && !assetsUploaded}
+                        disabled={uploading || assetsUploaded}
                         onChange={(event) =>
                           selectBanner(event.target.files?.[0])
                         }
@@ -470,12 +788,14 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                     <input
                       id="registration-video"
                       type="file"
+                      disabled={uploading || videoUploaded}
                       accept="video/mp4,video/webm,.mp4,.webm"
                       aria-describedby="registration-video-guidance"
                       onChange={(event) => selectVideo(event.target.files?.[0])}
                     />
                     <p className="fine" id="registration-video-guidance">
-                      MP4 or WebM · up to 100 MB. Local preview only.
+                      MP4 or WebM · up to 100 MB. Uploaded immediately after
+                      account registration and sign-in.
                     </p>
                     {videoError && (
                       <p className="error" role="alert">
@@ -494,18 +814,26 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                         aria-label="Previously selected campaign video"
                         onLoadedMetadata={(event) => {
                           const video = event.currentTarget;
-                          if (video.videoWidth > 0 && video.videoHeight > 0) {
+                          if (
+                            video.videoWidth > 0 &&
+                            video.videoHeight > 0 &&
+                            Number.isFinite(video.duration) &&
+                            video.duration > 0
+                          ) {
+                            setVideoDuration(video.duration);
                             setVideoDetails(
                               `${video.videoWidth} × ${video.videoHeight}`,
                             );
                           } else {
+                            setVideoDuration(null);
                             setVideoError(
-                              "This video could not be played. Choose another file.",
+                              "The video or its duration could not be read. Choose another file.",
                             );
                           }
                         }}
                         onError={() => {
                           setVideoDetails("");
+                          setVideoDuration(null);
                           setVideoError(
                             "This video could not be played. Choose another file.",
                           );
@@ -567,7 +895,10 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                       <strong>Your banner preview will appear here</strong>
                     )}
                   </div>
-                  <p>Concept placement · Files stay in this browser</p>
+                  <p>
+                    Concept placement · Preview only until you continue to
+                    payment
+                  </p>
                 </section>
               </div>
               <p className="error registration-error" role="alert">
@@ -575,7 +906,9 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
               </p>
               <p className="registration-privacy-note">
                 <span aria-hidden="true">i</span>
-                Video and banner previews are temporary. Nothing is uploaded.
+                Creating your account also saves this campaign as a draft. Video
+                and banner upload immediately after sign-in, so you can continue
+                later.
               </p>
               <div className="registration-actions">
                 <button className="button ghost" type="button" onClick={onBack}>
@@ -586,12 +919,15 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                   type="submit"
                   disabled={
                     !adName.trim() ||
-                    !banner ||
+                    (!banner && !assetsUploaded) ||
                     !videoDetails ||
-                    Boolean(videoError)
+                    Boolean(videoError) ||
+                    uploading
                   }
                 >
-                  Continue to advertiser details
+                  {campaignId
+                    ? "Upload missing files and continue"
+                    : "Continue to advertiser details"}
                 </button>
               </div>
             </form>
@@ -716,8 +1052,9 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                 {accountCreated
                   ? "Your account has been created."
                   : "Continuing creates your client account immediately."}{" "}
-                Campaign details and files remain a browser-local preview.
-                Contact details are not verified.
+                Your campaign draft is saved with the account, then its video
+                and banner upload immediately after sign-in. Contact details are
+                not verified.
               </p>
               <p className="error registration-error" role="alert">
                 {error}
@@ -748,19 +1085,23 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
             <div className="registration-form">
               <div className="registration-step-heading">
                 <span className="registration-step-kicker">
-                  03 / CAMPAIGN PLAN
+                  {inDashboard ? "02" : "03"} / CAMPAIGN PLAN
                 </span>
-                <h2>Choose your campaign plan</h2>
+                <h2 tabIndex={inDashboard ? -1 : undefined}>
+                  Choose your campaign plan
+                </h2>
                 <p>
                   Choose your cab count, daily plays and campaign duration to
                   estimate your budget. Cab count does not affect the price.
                 </p>
               </div>
-              <CampaignPlanner
-                selection={selection}
-                onSelectionChange={setSelection}
-                embedded
-              />
+              <fieldset disabled={paymentStarted || paying}>
+                <CampaignPlanner
+                  selection={selection}
+                  onSelectionChange={setSelection}
+                  embedded
+                />
+              </fieldset>
               <p className="registration-disclosure">
                 <strong>Before you continue</strong>No payment is collected.
                 Final pricing, placements and availability require confirmation.
@@ -769,7 +1110,11 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                 <button
                   className="button ghost"
                   type="button"
-                  onClick={() => setStep("client")}
+                  onClick={() => {
+                    resumeAfterCreative.current = "plan";
+                    setStep("creative");
+                  }}
+                  disabled={paymentStarted}
                 >
                   Back
                 </button>
@@ -788,9 +1133,13 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
             <form className="registration-form" onSubmit={goToPayment}>
               <div className="registration-step-heading">
                 <span className="registration-step-kicker">
-                  04 / FINAL REVIEW
+                  {inDashboard ? "03" : "04"} / FINAL REVIEW
                 </span>
-                <h2>Review your registration</h2>
+                <h2 tabIndex={inDashboard ? -1 : undefined}>
+                  {inDashboard
+                    ? "Review your campaign"
+                    : "Review your registration"}
+                </h2>
                 <p>
                   Make sure everything looks right before adding your ad to the
                   review queue.
@@ -804,25 +1153,36 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                 <div>
                   <span>Video</span>
                   <strong>
-                    {videoFile?.name} · {videoDetails}
+                    {videoFile
+                      ? `${videoFile.name} · ${videoDetails}`
+                      : videoDetails}
                   </strong>
                 </div>
                 <div>
                   <span>Banner</span>
-                  <strong>{banner?.name}</strong>
+                  <strong>
+                    {banner?.name ??
+                      (assetsUploaded
+                        ? "Banner already uploaded"
+                        : "Not uploaded")}
+                  </strong>
                 </div>
                 <div>
                   <span>Advertiser</span>
                   <strong>
-                    {client.name} · {client.business}
+                    {client.name
+                      ? `${client.name} · ${client.business}`
+                      : client.business}
                   </strong>
                 </div>
-                <div>
-                  <span>Contact</span>
-                  <strong>
-                    {client.email} · {client.phone}
-                  </strong>
-                </div>
+                {!inDashboard && (
+                  <div>
+                    <span>Contact</span>
+                    <strong>
+                      {client.email} · {client.phone}
+                    </strong>
+                  </div>
+                )}
                 <div>
                   <span>Plan</span>
                   <strong>
@@ -839,17 +1199,34 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                   alt="Campaign banner preview"
                 />
               )}
+              <div className="field">
+                <label htmlFor="registration-start-date">
+                  Requested campaign start date *
+                </label>
+                <input
+                  id="registration-start-date"
+                  type="date"
+                  value={startDate}
+                  disabled={uploading || paymentStarted || paying}
+                  required
+                  onChange={(event) => setStartDate(event.target.value)}
+                />
+                <small>
+                  The end date is calculated from your selected campaign days.
+                  Scheduling requires confirmation.
+                </small>
+              </div>
               <label className="registration-consent">
                 <input
                   type="checkbox"
                   checked={consent}
+                  disabled={uploading || paymentStarted || paying}
                   onChange={(event) => setConsent(event.target.checked)}
                 />
                 <span>
-                  I understand this is a browser-local preview: files are not
-                  uploaded and contact details are not verified. I agree to pay
-                  the plan amount, which is refunded if there is an issue with
-                  the ad video or content.
+                  I agree to the campaign plan and payment terms. My draft and
+                  files are already saved. Continuing does not charge me.
+                  Scheduling and approval require confirmation.
                 </span>
               </label>
               <p className="error registration-error" role="alert">
@@ -860,11 +1237,20 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                   className="button ghost"
                   type="button"
                   onClick={() => setStep("plan")}
+                  disabled={uploading || paymentStarted || paying}
                 >
                   Back
                 </button>
-                <button className="button yellow" type="submit">
-                  Continue to payment
+                <button
+                  className="button yellow"
+                  type="submit"
+                  disabled={uploading}
+                >
+                  {uploading
+                    ? "Uploading campaign files..."
+                    : campaignId && !assetsUploaded
+                      ? "Retry upload and continue to payment"
+                      : "Continue to payment"}
                 </button>
               </div>
             </form>
@@ -872,11 +1258,16 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
           {step === "payment" && (
             <div className="registration-form">
               <div className="registration-step-heading">
-                <span className="registration-step-kicker">05 / PAYMENT</span>
-                <h2>Pay for your campaign</h2>
+                <span className="registration-step-kicker">
+                  {inDashboard ? "04" : "05"} / PAYMENT
+                </span>
+                <h2 tabIndex={inDashboard ? -1 : undefined}>
+                  Pay for your campaign
+                </h2>
                 <p>
-                  Complete the payment securely with Razorpay. Your ad is
-                  submitted for review once the payment succeeds.
+                  Your campaign, video and banner are saved in Adrover. We check
+                  your payment status before checkout opens. Your campaign
+                  enters review only after payment is verified.
                 </p>
               </div>
               <div className="registration-payment-amount">
@@ -885,15 +1276,10 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                 <small>{plan ? campaignDescription(plan) : ""}</small>
               </div>
               <p className="registration-payment-refund">
-                If there is any issue with your ad video or content, your
-                payment will be refunded.
+                If checkout is interrupted, sign in again and check payment
+                status here. You can continue the same checkout; do not make a
+                separate payment. Refunds require separate processing.
               </p>
-              {!razorpayConfigured && (
-                <p className="registration-payment-refund">
-                  Demo mode: no Razorpay key is set, so a dummy payment is
-                  simulated. No money is charged.
-                </p>
-              )}
               <p className="error registration-error" role="alert">
                 {error}
               </p>
@@ -902,7 +1288,7 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                   className="button ghost"
                   type="button"
                   onClick={() => setStep("review")}
-                  disabled={paying}
+                  disabled={paying || paymentStarted}
                 >
                   Back
                 </button>
@@ -913,15 +1299,15 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
                   disabled={paying || !plan}
                 >
                   {paying
-                    ? razorpayConfigured
-                      ? "Opening Razorpay…"
-                      : "Processing demo payment…"
-                    : `Pay ${plan ? moneyFormat.format(plan.cost) : ""}${razorpayConfigured ? " with Razorpay" : " (demo)"}`}
+                    ? "Checking payment..."
+                    : paymentStarted
+                      ? "Check payment status / continue checkout"
+                      : `Pay ${plan ? moneyFormat.format(plan.cost) : ""} with Razorpay`}
                 </button>
               </div>
             </div>
           )}
-        </main>
+        </div>
         <aside className="dashboard-panel registration-sidebar">
           <span className="registration-summary-kicker">YOUR CAMPAIGN</span>
           <h2>{adName || "Your advertisement"}</h2>
@@ -943,6 +1329,7 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
               <label htmlFor="summary-days">Campaign days (minimum 7)</label>
               <input
                 id="summary-days"
+                disabled={uploading || paymentStarted || paying}
                 type="number"
                 min={minimumCampaignDays}
                 step="1"
@@ -959,6 +1346,7 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
               </label>
               <input
                 id="summary-daily-plays"
+                disabled={uploading || paymentStarted || paying}
                 type="number"
                 min={minimumDailyPlays}
                 step="1"
@@ -976,6 +1364,7 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
               <label htmlFor="summary-cabs">Requested cabs</label>
               <select
                 id="summary-cabs"
+                disabled={uploading || paymentStarted || paying}
                 value={selection.vehicles}
                 onChange={(event) =>
                   setSelection({ ...selection, vehicles: event.target.value })
@@ -1012,12 +1401,16 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
           </p>
           <div className="registration-summary-status">
             <span aria-hidden="true" />
-            Preview · Pending approval
+            {campaignId ? "Saved campaign draft" : "Local preview"}
           </div>
-          <p>Files are not uploaded. Payment is taken via Razorpay.</p>
+          <p>
+            {inDashboard
+              ? "Your progress is saved to your client account."
+              : "Your campaign is saved with your account at registration. Its video and banner upload immediately after sign-in."}
+          </p>
         </aside>
       </div>
-      {success && (
+      {success && !inDashboard && (
         <div className="registration-modal-backdrop">
           <section
             className="registration-success"
@@ -1028,17 +1421,16 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
             <span className="registration-success-icon" aria-hidden="true">
               ✓
             </span>
-            <span className="eyebrow">PAYMENT DONE</span>
+            <span className="eyebrow">CHECKOUT COMPLETE</span>
             <h2 id="registration-success-title">
-              Payment received. Your ad has been submitted for review
+              Your campaign and files have been submitted
             </h2>
             <p>
-              {adName} is in the approval queue. Payment ID: {paymentId}. If
-              there is any issue with your ad video or content, your payment
-              will be refunded.
+              {adName} and its creative have been saved. Your payment is
+              confirmed and your campaign is awaiting review.
             </p>
             <div className="registration-success-plan">
-              {plan && campaignDescription(plan)} illustrative
+              {plan && campaignDescription(plan)}
             </div>
             <a className="button yellow" href="dashboard.html">
               Go to advertiser dashboard
@@ -1047,5 +1439,86 @@ export function AdvertiserRegistration({ onBack }: { onBack: () => void }) {
         </div>
       )}
     </section>
+  );
+
+  if (!inDashboard) return wizard;
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="campaign-setup-dialog"
+      aria-labelledby="campaign-setup-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        void dismiss();
+      }}
+    >
+      <header className="campaign-setup-header">
+        <div>
+          <span className="eyebrow">CLIENT DASHBOARD</span>
+          <h2 id="campaign-setup-title">
+            {success ? "Campaign status" : "Continue campaign setup"}
+          </h2>
+          {adName && <p>{adName}</p>}
+        </div>
+        <button
+          type="button"
+          className="button ghost small"
+          aria-label="Close campaign setup"
+          disabled={busy}
+          onClick={() => void dismiss()}
+        >
+          Close
+        </button>
+      </header>
+      {closeError && (
+        <div className="campaign-setup-notice">
+          <div className="error" role="alert">
+            {closeError} Your changes are still here. Try closing again to save
+            them.
+          </div>
+          <button
+            type="button"
+            className="button ghost small"
+            onClick={() => {
+              dialogRef.current?.close();
+              onDismiss?.();
+            }}
+          >
+            Discard unsaved changes and close
+          </button>
+        </div>
+      )}
+      <div
+        className="campaign-setup-body"
+        ref={bodyRef}
+        inert={closing || advancing}
+      >
+        {loadingDraft ? (
+          <p role="status">Loading your saved campaign...</p>
+        ) : !campaignId ? (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        ) : success ? (
+          <section className="dashboard-panel campaign-setup-complete">
+            <span className="registration-success-icon" aria-hidden="true">
+              ✓
+            </span>
+            <h3 tabIndex={-1}>Payment verified</h3>
+            <p>{adName} is awaiting review. No further payment is needed.</p>
+            <button
+              type="button"
+              className="button yellow"
+              onClick={() => void dismiss()}
+            >
+              Done
+            </button>
+          </section>
+        ) : (
+          wizard
+        )}
+      </div>
+    </dialog>
   );
 }

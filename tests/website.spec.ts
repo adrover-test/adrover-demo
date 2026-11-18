@@ -1,6 +1,12 @@
 import { expect, test, type Download, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { seedDemoSession } from "./demo-session";
+import {
+  clientCampaigns,
+  clientPayments,
+  clientProfile,
+  mockClientPortal,
+} from "./client-fixtures";
 
 const pages = [
   "index",
@@ -32,6 +38,7 @@ async function downloadedText(download: Download) {
 }
 
 async function signInDemo(page: Page, next: string) {
+  await mockClientPortal(page);
   await seedDemoSession(page, "advertiser@example.com", next);
 }
 
@@ -467,17 +474,29 @@ test("contact rejects malformed campaign links without blocking a new draft", as
   await expect(page.locator("#incoming-campaign")).toBeHidden();
 });
 
-test("client login requires email and password without OTP", async ({ page }) => {
+test("client login requires email and password without OTP", async ({
+  page,
+}) => {
   await page.goto("login.html");
-  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
-  await expect(page.locator("#login-email")).toHaveAttribute("autocomplete", "username");
-  await expect(page.locator("#login-password")).toHaveAttribute("autocomplete", "current-password");
+  await expect(
+    page.getByRole("heading", { name: "Welcome back" }),
+  ).toBeVisible();
+  await expect(page.locator("#login-email")).toHaveAttribute(
+    "autocomplete",
+    "username",
+  );
+  await expect(page.locator("#login-password")).toHaveAttribute(
+    "autocomplete",
+    "current-password",
+  );
   await expect(page.locator("#login-otp, #login-phone")).toHaveCount(0);
   await page.getByRole("button", { name: "Sign in" }).click();
-  expect(await page.evaluate(() => sessionStorage.getItem("adrover-demo-session"))).toBeNull();
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("adrover-demo-session")),
+  ).toBeNull();
 });
 
-test("dashboard presents sample campaign metrics and responsive navigation", async ({
+test("dashboard shows server account totals and navigates to live account pages", async ({
   page,
 }) => {
   await signInDemo(page, "dashboard.html");
@@ -485,6 +504,9 @@ test("dashboard presents sample campaign metrics and responsive navigation", asy
     "Welcome back, Advertiser",
   );
   await expect(page.locator(".dashboard-stat")).toHaveCount(4);
+  await expect(page.locator(".dashboard-stat").nth(0)).toContainText("6");
+  await expect(page.locator(".dashboard-stat").nth(1)).toContainText("43,400");
+  await expect(page.locator(".dashboard-stat").nth(2)).toContainText("18");
   await expect(page.locator(".plays-bar")).toHaveCount(14);
   await expect(page.locator(".dashboard-nav a")).toHaveText([
     "▦Dashboard",
@@ -492,41 +514,30 @@ test("dashboard presents sample campaign metrics and responsive navigation", asy
     "₹Payments & history",
     "○Profile",
   ]);
-  await expect(
-    page.locator('.dashboard-nav a[href="create-ad.html"]'),
-  ).toHaveCount(0);
-  await expect(
-    page.getByRole("heading", { name: "Route distribution" }),
-  ).toHaveCount(0);
-  await expect(page.locator(".dashboard-table tbody tr")).toHaveCount(4);
-  await expect(page.locator(".dashboard-table thead th")).toHaveText([
-    "Ad name",
-    "Submitted",
-    "Status",
-    "Total plays",
-    "Details",
-  ]);
   const rows = page.locator(".dashboard-table tbody tr");
-  for (const row of await rows.all()) {
-    const name = await row.locator("th strong").innerText();
-    const details = row.getByRole("link", {
-      name: `View details for ${name}`,
-      exact: true,
-    });
-    await expect(details).toBeVisible();
-    const destination = await details.getAttribute("href");
-    await details.click();
-    await expect(page).toHaveURL(new URL(destination!, page.url()).toString());
-    await expect(page.locator("main h1")).toHaveText(name);
-    await page.goBack();
-  }
+  await expect(rows).toHaveCount(4);
+  const apolloRow = rows.filter({ hasText: "Apollo Super Speciality Checkup" });
+  await expect(apolloRow).toHaveCount(1);
+  const details = apolloRow.getByRole("link", {
+    name: "View details for Apollo Super Speciality Checkup",
+  });
+  await details.click();
+  await expect(page.locator("main h1")).toHaveText(
+    "Apollo Super Speciality Checkup",
+  );
+  await page.getByRole("link", { name: "Back to my advertisements" }).click();
+  await expect(page).toHaveURL(/advertisements\.html$/);
+  await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+  await expect(page).toHaveURL(/dashboard\.html#overview$/);
   await page.getByRole("link", { name: "Payments & history" }).click();
   await expect(page).toHaveURL(/payments\.html$/);
-  await expect(page.locator(".billing-summary")).toBeVisible();
+  await expect(page.locator(".billing-table tbody tr")).toHaveCount(
+    clientPayments.length,
+  );
   await page.getByRole("link", { name: "Profile", exact: true }).click();
   await expect(page).toHaveURL(/profile\.html$/);
   await expect(page.locator(".profile-details-grid")).toContainText(
-    "advertiser@example.com",
+    clientProfile.email,
   );
   await expect(
     page.getByRole("link", { name: "Profile", exact: true }),
@@ -534,46 +545,40 @@ test("dashboard presents sample campaign metrics and responsive navigation", asy
   await page.setViewportSize({ width: 320, height: 800 });
   expect(
     await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth,
+      () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
 });
 
-test("profile edits validate, save across refresh and cancel without saving", async ({
+test("profile updates the supported name remotely and retains read-only contact details", async ({
   page,
 }) => {
   await signInDemo(page, "profile.html");
-  await page.getByRole("button", { name: "Edit profile" }).click();
-  await page.getByLabel("Account name").fill("   ");
-  await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByRole("alert")).toContainText("not just spaces");
+  await expect(page.locator(".profile-details-grid")).toContainText(
+    clientProfile.email,
+  );
+  await expect(page.locator(".profile-details-grid")).toContainText(
+    clientProfile.phone,
+  );
+  await expect(page.getByText("Business name", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Edit name" }).click();
   await page.getByLabel("Account name").fill("Asha Rao");
-  await page.getByLabel("Business name").fill("Sunrise Coffee");
-  await page.getByLabel("Business email").fill("contact@sunrise.example");
-  await page.getByLabel("Phone number").fill("+91 98765 43210");
-  await page.getByLabel("Primary service area").fill("Hyderabad");
-  await page.getByLabel("Advertiser type").fill("Local business");
   await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByRole("status")).toContainText("Profile saved");
+  await expect(page.getByRole("status")).toContainText(
+    "account name has been updated",
+  );
   await expect(page.locator(".profile-identity h2")).toHaveText("Asha Rao");
   await page.reload();
+  await expect(page.locator(".profile-details-grid")).toContainText("Asha Rao");
   await expect(page.locator(".profile-details-grid")).toContainText(
-    "Sunrise Coffee",
+    clientProfile.email,
   );
-  await expect(page.locator(".profile-details-grid")).toContainText(
-    "contact@sunrise.example",
-  );
-  await page.getByRole("button", { name: "Edit profile" }).click();
-  await page.getByLabel("Business name").fill("Unsaved business");
-  await page.getByRole("button", { name: /^Cancel/ }).click();
-  await expect(page.locator(".profile-details-grid")).toContainText(
-    "Sunrise Coffee",
-  );
-  await expect(page.locator(".profile-details-grid")).not.toContainText(
-    "Unsaved business",
-  );
+  await page.getByRole("button", { name: "Edit name" }).click();
+  await page.getByLabel("Account name").fill("Unsaved name");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.locator(".profile-details-grid")).toContainText("Asha Rao");
   await page.setViewportSize({ width: 320, height: 800 });
-  await page.getByRole("button", { name: "Edit profile" }).click();
+  await page.getByRole("button", { name: "Edit name" }).click();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -581,32 +586,42 @@ test("profile edits validate, save across refresh and cancel without saving", as
   ).toBe(true);
 });
 
-test("profile reports a browser storage write failure without losing edits", async ({
+test("profile keeps edits visible when saving the account name fails", async ({
   page,
 }) => {
-  await signInDemo(page, "profile.html");
-  await page.getByRole("button", { name: "Edit profile" }).click();
-  await page.getByLabel("Account name").fill("Keep my changes");
-  await page.evaluate(() => {
-    Storage.prototype.setItem = () => {
-      throw new Error("Browser storage is unavailable.");
-    };
+  await mockClientPortal(page);
+  await page.route("**/api/Users/me", async (route) => {
+    if (route.request().method() === "PUT") {
+      return route.fulfill({
+        status: 503,
+        json: { success: false, message: "Temporary service issue" },
+      });
+    }
+    return route.fulfill({ json: { success: true, data: clientProfile } });
   });
+  await seedDemoSession(page, "advertiser@example.com", "profile.html");
+  await page.getByRole("button", { name: "Edit name" }).click();
+  await page.getByLabel("Account name").fill("Keep my changes");
   await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByRole("alert")).toHaveText(
-    "Browser storage is unavailable.",
+  await expect(page.getByRole("alert")).toContainText(
+    "We couldn't save your changes",
   );
   await expect(page.getByLabel("Account name")).toHaveValue("Keep my changes");
-  await expect(page.getByRole("status")).not.toContainText("Profile saved");
+  await expect(page.getByRole("status")).not.toContainText("updated");
 });
 
-test("advertisement list filters and searches sample campaigns", async ({
+test("advertisement list filters and searches campaigns returned for this client", async ({
   page,
 }) => {
   await signInDemo(page, "advertisements.html");
-  await expect(page.locator(".ad-list-card")).toHaveCount(6);
+  await expect(page.locator(".ad-list-card")).toHaveCount(
+    clientCampaigns.length,
+  );
+  await expect(
+    page.locator(".ad-list-summary .dashboard-stat").first(),
+  ).toContainText("6 campaigns");
   await page.getByRole("button", { name: /^Active/ }).click();
-  await expect(page.locator(".ad-list-card")).toHaveCount(4);
+  await expect(page.locator(".ad-list-card")).toHaveCount(1);
   await page.getByPlaceholder("Search campaigns or brands").fill("Apollo");
   await expect(page.locator(".ad-list-card")).toHaveCount(1);
   await expect(page.locator(".ad-list-card")).toContainText(
@@ -617,7 +632,9 @@ test("advertisement list filters and searches sample campaigns", async ({
     .fill("no matching ad");
   await expect(page.locator(".ad-list-empty")).toBeVisible();
   await page.getByRole("button", { name: "Clear filters" }).click();
-  await expect(page.locator(".ad-list-card")).toHaveCount(6);
+  await expect(page.locator(".ad-list-card")).toHaveCount(
+    clientCampaigns.length,
+  );
   await page
     .locator(".ad-list-card")
     .filter({ hasText: "Apollo Super Speciality Checkup" })
@@ -664,50 +681,35 @@ test("portal entrances respect reduced motion and leave content visible", async 
   await expect(page.locator(".view-ad-status-bar")).toBeVisible();
 });
 
-test("campaign status bar shows active, pending and completed schedules", async ({
+test("campaign details show returned status, payment totals and recorded playback", async ({
   page,
 }) => {
   await signInDemo(page, "view-ad.html?id=apollo-checkup");
-  const statusBar = page.getByRole("region", {
-    name: "Campaign status and days remaining",
-  });
-  const progress = page.getByRole("progressbar", {
-    name: "Campaign days completed",
-  });
-  await expect(statusBar).toContainText("15 days remaining");
-  await expect(statusBar).toContainText("Pending plays: 31,600");
+  await expect(page.locator("main h1")).toHaveText(
+    "Apollo Super Speciality Checkup",
+  );
   await expect(
-    page
-      .locator(".view-ad-meta > div")
-      .filter({ has: page.getByText("Pending plays", { exact: true }) }),
-  ).toContainText("31,600");
-  await expect(progress).toHaveAttribute("value", "15");
-  await expect(progress).toHaveAttribute("max", "30");
+    page.getByRole("region", { name: "Campaign status" }),
+  ).toContainText("Active");
+  await expect(page.locator(".view-ad-meta")).toContainText("18,400");
+  await expect(page.locator(".view-ad-meta")).toContainText("45,000");
+  await expect(page.locator(".dashboard-table tbody")).toContainText(
+    "TS09AB1234",
+  );
+  await expect(page.locator(".dashboard-table tbody")).toContainText(
+    "17.44350, 78.37720",
+  );
   await page.goto("view-ad.html?id=cyberfintech-launch");
-  await expect(statusBar).toContainText("Pending approval");
-  await expect(statusBar).toContainText("Pending plays: 50,000");
   await expect(
-    page
-      .locator(".view-ad-meta > div")
-      .filter({ has: page.getByText("Pending plays", { exact: true }) }),
-  ).toContainText("50,000");
-  await expect(statusBar).toContainText("30 days requested");
-  await expect(statusBar).toContainText("Your campaign has not started");
-  await expect(progress).toHaveAttribute("value", "0");
+    page.getByRole("region", { name: "Campaign status" }),
+  ).toContainText("awaiting review");
+  await expect(page.locator(".view-ad-meta")).toContainText("60,000");
   await page.goto("view-ad.html?id=deccan-living-expo");
-  await expect(statusBar).toContainText("0 days remaining");
-  await expect(statusBar).toContainText("Pending plays: 0");
   await expect(
-    page
-      .locator(".view-ad-meta > div")
-      .filter({ has: page.getByText("Pending plays", { exact: true }) })
-      .locator("dd"),
-  ).toHaveText("0");
-  await expect(statusBar).toContainText("Campaign completed");
-  await expect(progress).toHaveAttribute("value", "17");
-  await expect(progress).toHaveAttribute("max", "17");
+    page.getByRole("region", { name: "Campaign status" }),
+  ).toContainText("finished");
+  await expect(page.locator(".view-ad-meta")).toContainText("30,000");
   await page.setViewportSize({ width: 320, height: 800 });
-  await expect(statusBar).toBeVisible();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -715,7 +717,7 @@ test("campaign status bar shows active, pending and completed schedules", async 
   ).toBe(true);
 });
 
-test("campaign details show overview without analytics and export a sample report", async ({
+test("campaign details load the owner's creative and export the returned campaign report", async ({
   page,
 }) => {
   await signInDemo(page, "view-ad.html?id=apollo-checkup");
@@ -724,28 +726,26 @@ test("campaign details show overview without analytics and export a sample repor
   );
   await expect(page.locator(".view-ad-top-grid")).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Creative preview" }),
+    page.getByRole("heading", { name: "Your creative" }),
   ).toBeVisible();
+  await expect(page.locator("img.registration-review-banner")).toHaveAttribute(
+    "src",
+    "https://cdn.example.com/apollo.jpg",
+  );
   await expect(page.locator(".view-ad-stats")).toHaveCount(0);
-  await expect(page.locator(".view-ad-summary-bars")).toHaveCount(0);
-  for (const name of [
-    "Daily ad plays",
-    "Route coverage",
-    "Cab-wise play telemetry",
-  ]) {
-    await expect(page.getByRole("heading", { name, exact: true })).toHaveCount(
-      0,
-    );
-  }
   const pending = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download report" }).click();
   const download = await pending;
   expect(download.suggestedFilename()).toBe(
-    "Adrover-apollo-checkup-sample-report.txt",
+    "Adrover-apollo-checkup-report.txt",
   );
-  expect(await downloadedText(download)).toContain("Illustrative report only.");
+  const report = await downloadedText(download);
+  expect(report).toContain("Advertisement: Apollo Super Speciality Checkup");
+  expect(report).toContain("Plays delivered: 18400");
+  expect(report).toContain("Campaign amount (INR): 45000");
+  expect(report).not.toMatch(/sample|illustrative/i);
   await page.goto("view-ad.html?id=invalid");
-  await expect(page.locator("main h1")).toHaveText("Advertisement not found");
+  await expect(page.getByRole("alert")).toContainText("Campaign not found");
 });
 
 test("portal routes require a demo sign-in and exit clears the demo session", async ({
@@ -753,16 +753,23 @@ test("portal routes require a demo sign-in and exit clears the demo session", as
 }) => {
   await page.goto("dashboard.html");
   await expect(page).toHaveURL(/login\.html\?next=/);
-  await expect(page.locator("#login-phone")).toBeVisible();
+  await expect(page.locator("#login-email")).toBeVisible();
+  await mockClientPortal(page);
   await seedDemoSession(page, "advertiser@example.com");
   await expect(page).toHaveURL(/dashboard\.html$/);
+  await page.getByRole("link", { name: "Back to homepage" }).click();
+  await expect(page).toHaveURL(/index\.html$/);
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("adrover-demo-session")),
+  ).toContain("advertiser@example.com");
+  await page.goto("dashboard.html");
   await page.locator(".portal-exit").click();
   await expect(page).toHaveURL(/login\.html\?signedOut=1$/);
   await page.goto("dashboard.html");
   await expect(page).toHaveURL(/login\.html\?next=/);
 });
 
-test("create-ad flow previews a banner, selects the starter plan and saves a local review brief", async ({
+test("create-ad previews an optional banner and downloads a local brief without submitting", async ({
   page,
 }) => {
   const submissions: string[] = [];
@@ -771,12 +778,6 @@ test("create-ad flow previews a banner, selects the starter plan and saves a loc
   });
   await signInDemo(page, "create-ad.html");
   await page.locator("#ad-name").fill("Spring opening campaign");
-  await expect(page.getByLabel("Business or brand")).toHaveCount(0);
-  await expect(page.getByLabel("Campaign objective")).toHaveCount(0);
-  await expect(page.getByLabel("Preferred area")).toHaveCount(0);
-  await expect(
-    page.getByRole("heading", { name: "Estimate your campaign" }),
-  ).toHaveCount(0);
   await page.locator("#ad-banner").setInputFiles({
     name: "spring-banner.png",
     mimeType: "image/png",
@@ -789,70 +790,56 @@ test("create-ad flow previews a banner, selects the starter plan and saves a loc
     "src",
     /^blob:/,
   );
-  await expect(page.getByText("10,000 plays · 7 days")).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: /Submit ad for review/ }),
-  ).toBeDisabled();
-  await page.getByLabel("Select Starter plan").check();
   await expect(page.locator(".create-ad-mock-screen")).toContainText(
     "Spring opening campaign",
   );
   const pending = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download brief" }).click();
+  await page.getByRole("button", { name: /Download campaign brief/ }).click();
   const download = await pending;
   expect(download.suggestedFilename()).toBe(
     "Adrover-advertisement-review-brief.txt",
   );
   const text = await downloadedText(download);
   expect(text).toContain("Advertisement: Spring opening campaign");
-  expect(text).toContain("Plan: 10,000 plays over 7 days");
-  expect(text).toContain("Illustrative amount: ₹1,000");
   expect(text).toContain("Banner image: spring-banner.png");
-  expect(text).toContain("LOCAL REVIEW BRIEF");
+  expect(text).toContain("downloading it does not submit a campaign");
   await expect(page.locator(".create-ad-status")).toContainText(
     "Review brief downloaded",
   );
-  await page.getByRole("button", { name: /Submit ad for review/ }).click();
-  await expect(page).toHaveURL(/view-ad\.html\?id=/);
-  await expect(page.locator("main h1")).toHaveText("Spring opening campaign");
-  await expect(page.locator(".campaign-status")).toHaveText("Pending approval");
-  await page.locator('.dashboard-nav a[href="advertisements.html"]').click();
-  await expect(page.locator(".ad-list-card")).toHaveCount(7);
-  await expect(page.locator(".ad-list-card").first()).toContainText(
-    "Spring opening campaign",
-  );
-  await expect(page.locator(".ad-list-card").first()).toContainText("10,000");
   expect(submissions).toEqual([]);
 });
 
-test("billing page filters transactions and downloads only a sample statement", async ({
+test("payments filter server records and download only actual payment history", async ({
   page,
 }) => {
-  const submissions: string[] = [];
-  page.on("request", (request) => {
-    if (request.method() !== "GET") submissions.push(request.url());
-  });
   await signInDemo(page, "payments.html");
-  await expect(page.locator(".billing-summary .dashboard-stat")).toHaveCount(3);
-  await expect(page.locator(".billing-table tbody tr")).toHaveCount(6);
-  await page.getByLabel("Filter by transaction status").selectOption("Pending");
-  await expect(page.locator(".billing-table tbody tr")).toHaveCount(1);
-  await expect(page.locator(".billing-table tbody")).toContainText(
-    "Weekend Dining Special",
+  await expect(page.locator(".billing-table tbody tr")).toHaveCount(
+    clientPayments.length,
   );
   await page
-    .getByLabel("Filter by transaction status")
-    .selectOption("All transactions");
+    .getByLabel("Filter this page by payment status")
+    .selectOption("Pending");
+  await expect(page.locator(".billing-table tbody tr")).toHaveCount(1);
+  await expect(page.locator(".billing-table tbody")).toContainText(
+    "Cyberfintech Launch",
+  );
+  await page
+    .getByLabel("Filter this page by payment status")
+    .selectOption("All statuses");
   const pending = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download statement" }).click();
+  await page.getByRole("button", { name: "Download this page" }).click();
   const download = await pending;
   expect(download.suggestedFilename()).toBe(
-    "Adrover-sample-billing-statement.txt",
+    "adrover-payment-history-page-1.csv",
   );
-  expect(await downloadedText(download)).toContain(
-    "No payment information or live account data is included.",
+  const statement = await downloadedText(download);
+  expect(statement).toContain('"pay-1"');
+  expect(statement).toContain('"order-1"');
+  expect(statement).toContain('"Apollo Super Speciality Checkup"');
+  expect(statement).toContain('"45000"');
+  expect(statement).not.toMatch(
+    /sample|illustrative|available balance|tax invoice/i,
   );
-  expect(submissions).toEqual([]);
 });
 
 test("enquiry validates required fields and saves only a local branded draft", async ({

@@ -1,9 +1,130 @@
 import { expect, test } from "@playwright/test";
+import type {
+  RegistrationDraft,
+  RegistrationProgress,
+} from "../src/lib/advertisementApi";
 
-test("Register opens the creative form directly with local video playback", async ({
+test("Register saves its campaign with the account and uploads immediately with resumable retries", async ({
   page,
   isMobile,
 }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(HTMLMediaElement.prototype, "duration", {
+      get: () => 1,
+    });
+    window.Razorpay = class {
+      constructor(
+        private options: {
+          handler: (response: {
+            razorpay_payment_id: string;
+            razorpay_order_id: string;
+            razorpay_signature: string;
+          }) => void;
+        },
+      ) {}
+      on() {}
+      open() {
+        this.options.handler({
+          razorpay_payment_id: "pay_test",
+          razorpay_order_id: "order_test",
+          razorpay_signature: "test-signature",
+        });
+      }
+    };
+  });
+  const uploads: string[] = [];
+  let draft: RegistrationDraft | undefined;
+  let videoAttempts = 0;
+  let imageAttempts = 0;
+  let checkoutCount = 0;
+  await page.route(/\/api\/Payments\/.*$/i, async (route) => {
+    if (!draft) throw new Error("Campaign must exist before checkout");
+    if (route.request().url().endsWith("create-order")) {
+      checkoutCount++;
+      expect(route.request().postDataJSON()).toMatchObject({
+        advertisementId: draft.id,
+        amount: 15750,
+      });
+      draft.paymentStarted = true;
+      await route.fulfill({
+        json: {
+          success: true,
+          data: {
+            orderId: "order_test",
+            keyId: "rzp_test_fixture",
+            amount: 15750,
+            currency: "INR",
+            status: "Pending",
+          },
+        },
+      });
+    } else {
+      expect(route.request().postDataJSON()).toEqual({
+        orderId: "order_test",
+        paymentId: "pay_test",
+        signature: "test-signature",
+      });
+      draft.paidAmount = 15750;
+      draft.status = "PendingApproval";
+      await route.fulfill({
+        json: { success: true, data: { status: "Completed" } },
+      });
+    }
+  });
+  await page.route(/\/api\/Advertisements(?:\/.*)?$/i, async (route) => {
+    if (!draft)
+      throw new Error(
+        "Draft must be saved with account registration before upload",
+      );
+    const path = new URL(route.request().url()).pathname;
+    expect(route.request().headers().authorization).toBe("Bearer client-token");
+    if (path.endsWith("/upload-video")) {
+      uploads.push(path);
+      if (++videoAttempts === 1) {
+        await route.fulfill({
+          status: 503,
+          json: { success: false, message: "Storage unavailable" },
+        });
+        return;
+      }
+      expect(route.request().postData()).toContain(
+        'name="file"; filename="campaign.webm"',
+      );
+      draft.hasVideo = true;
+    } else if (path.endsWith("/upload-image")) {
+      uploads.push(path);
+      expect(route.request().postData()).toContain(
+        'name="file"; filename="banner.png"',
+      );
+      if (++imageAttempts === 1) {
+        await route.fulfill({
+          status: 503,
+          json: {
+            success: false,
+            error: { message: "Banner storage unavailable" },
+          },
+        });
+        return;
+      }
+      draft.hasBanner = true;
+    } else if (path.includes("/drafts/")) {
+      if (route.request().method() === "PUT")
+        draft.progress = route.request().postDataJSON() as RegistrationProgress;
+    } else if (path.endsWith("/drafts") && route.request().method() === "GET") {
+      await route.fulfill({ json: { success: true, data: [draft] } });
+      return;
+    } else if (path.endsWith("/my-ads") && route.request().method() === "GET") {
+      await route.fulfill({
+        json: { success: true, data: { items: [], total: 0 } },
+      });
+      return;
+    } else {
+      throw new Error(
+        "Registration must not create another campaign at the end",
+      );
+    }
+    await route.fulfill({ json: { success: true, data: draft } });
+  });
   const requests: { endpoint: string; body: unknown }[] = [];
   let loginAttempts = 0;
   let registerAttempts = 0;
@@ -16,6 +137,24 @@ test("Register opens the creative form directly with local video playback", asyn
         json: { error: { message: "Registration unavailable" } },
       });
     } else if (endpoint.endsWith("/register")) {
+      const progress = route.request().postDataJSON()
+        .advertisement as RegistrationProgress;
+      expect(progress).toMatchObject({
+        name: "Campaign preview",
+        brand: "Test Brand",
+        days: "14",
+        cabs: "20",
+      });
+      draft = {
+        id: progress.id,
+        progress,
+        hasVideo: false,
+        hasBanner: false,
+        paymentStarted: false,
+        status: "Draft",
+        amount: 0,
+        paidAmount: 0,
+      };
       await route.fulfill({ json: { success: true } });
     } else if (++loginAttempts === 1) {
       await route.fulfill({
@@ -158,6 +297,16 @@ test("Register opens the creative form directly with local video playback", asyn
     "Sign-in temporarily unavailable",
   );
   await page.getByRole("button", { name: /Continue/ }).click();
+  await expect(page.locator(".registration-error")).toContainText(
+    "We could not complete your request",
+  );
+  expect(draft).toBeDefined();
+  expect(checkoutCount).toBe(0);
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await expect(page.locator(".registration-error")).toContainText(
+    "We could not complete your request",
+  );
+  await page.getByRole("button", { name: /Continue/ }).click();
   await expect(
     page.getByRole("heading", { name: "Choose your campaign plan" }),
   ).toBeVisible();
@@ -167,7 +316,7 @@ test("Register opens the creative form directly with local video playback", asyn
     "/api/v1/auth/client-login",
     "/api/v1/auth/client-login",
   ]);
-  expect(requests[0].body).toEqual({
+  expect(requests[0].body).toMatchObject({
     email: "advertiser@example.com",
     phone: "919876543210",
     fullName: "Test Advertiser",
@@ -175,11 +324,11 @@ test("Register opens the creative form directly with local video playback", asyn
     role: "Client",
   });
   await page.getByRole("button", { name: "Back" }).click();
-  await expect(page.getByLabel("Email (username) *")).toHaveAttribute(
-    "readonly",
-    "",
-  );
-  await page.getByRole("button", { name: /Continue/ }).click();
+  await expect(page.locator("#registration-video")).toBeDisabled();
+  await expect(page.locator("#registration-banner")).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Upload missing files and continue" })
+    .click();
   expect(requests).toHaveLength(4);
   await expect(page.locator("#total-cost")).toHaveText("₹4,200");
   await expect(page.locator("#daily-play-count")).toHaveValue("1000");
@@ -204,25 +353,41 @@ test("Register opens the creative form directly with local video playback", asyn
     "2,500 plays per day × 21 days = 52,500 estimated",
   );
   await expect(page.locator(".registration-form")).toContainText("₹15,750");
-  await page.getByLabel(/I understand this is a browser-local preview/).check();
+  await page.getByLabel("Requested campaign start date").fill("2027-01-01");
+  await page.getByLabel(/I agree to the campaign plan/).check();
   await page.getByRole("button", { name: /Continue to payment/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Pay for your campaign" }),
+  ).toBeVisible();
+  expect(uploads).toEqual([
+    `/api/Advertisements/${draft?.id}/upload-video`,
+    `/api/Advertisements/${draft?.id}/upload-video`,
+    `/api/Advertisements/${draft?.id}/upload-image`,
+    `/api/Advertisements/${draft?.id}/upload-image`,
+  ]);
+  expect(checkoutCount).toBe(0);
   await page.getByRole("button", { name: /Pay ₹15,750/ }).click();
   await expect(page.getByRole("dialog")).toContainText("₹15,750");
-  const saved = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem("adrover-demo-advertisements") ?? "[]"),
+  await expect(page.getByRole("dialog")).toContainText(
+    "Your payment is confirmed",
   );
-  expect(saved[0]).toMatchObject({ target: 52500, totalDays: 21 });
-  expect(saved[0].note).toContain("₹15,750");
+  expect(checkoutCount).toBe(1);
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("adrover-demo-advertisements"),
+    ),
+  ).toBeNull();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth > innerWidth,
     ),
   ).toBe(false);
   await page.reload();
-  await expect(input).toHaveValue("");
+  await expect(page).toHaveURL(/dashboard\.html\?draft=/);
   await expect(
-    page.getByRole("heading", { name: "Name your ad and add a banner" }),
-  ).toBeVisible();
+    page.getByRole("dialog", { name: "Campaign status" }),
+  ).toContainText("Payment verified");
+  expect(checkoutCount).toBe(1);
 });
 
 test("old registration URL redirects to the standalone creative form", async ({

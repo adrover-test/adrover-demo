@@ -1,9 +1,9 @@
 # Adrover website
 
 A complete React + TypeScript conversion of the supplied Adrover designs, using Vite.
-The site contains Home, Pricing, Contact us, an advertiser login preview, a
-sample advertiser dashboard, a campaign setup preview, an ad list and a sample
-profile, campaign details and billing history.
+The site contains Home, Pricing, Contact us and an authenticated client workspace
+with saved campaigns, recorded playback, creative previews, account profile and
+payment history. The separate administrator demo remains browser-local.
 This project is a separate copy; the original design folder is unchanged.
 
 ## Run locally
@@ -41,26 +41,30 @@ frontend origin through CORS.
 | `pricing.html`        | `src/pages/Pricing.tsx`        | Video preview and illustrative calculator |
 | `register.html`       | `src/pages/Register.tsx`       | Video selection and advertiser registration |
 
-Register opens the creative onboarding form directly. The combined details and account step creates a Client account on the backend immediately, using the email as username and a password, and signs the user in. Contact details are not verified; campaign and payment preview data remain local. If an account already exists, use the login page instead. Select a campaign video
-and banner to preview them on the mock screen, then edit campaign days, requested
-cabs and plays per day directly in the campaign sidebar.
-The sidebar and Plan calculator share selections and update the price immediately.
-Select a video and use the same plays-per-day × days calculator as Pricing in the
-Plan step. Cab count is limited to 10, 20 or 30 and does not affect the estimate.
-The total estimated plays and amount update the sidebar, review and saved local
-brief; invalid selections block continuing. Each play is 30 seconds and is
-estimated at INR 0.30. Plans start at 1,000 plays per day and 7 days.
-MP4/WebM videos must be non-empty, browser-playable and at most 100 MB. Files stay
-local and are cleared on refresh. The old `pricing.html#registration` URL redirects
-to `register.html`; Pricing remains a separate calculator and video-preview page.
+`register.html` creates the Client account and campaign draft together. The video
+and banner upload immediately after sign-in. Saved campaign status and next steps
+appear in the signed-in **Client Dashboard**, not on the public homepage. If the
+client leaves, sign in and open **Pick up where you left off → Continue setup**.
+The campaign opens in a popup on the dashboard, not on the registration page.
+**My advertisements** and older draft links lead to the same dashboard popup.
+The dashboard also has **Back to homepage**, which keeps the client signed in.
+Draft progress restores across devices; only files whose uploads did not finish
+need to be selected again. Plan and review changes autosave; closing the popup
+saves pending edits before updating the campaign card. The popup shows save
+failures and lets you retry or discard unsaved changes. On Review, choose the requested start
+date and accept the terms before continuing to payment. Creating a draft or
+uploading files does not charge the client.
+MP4/WebM videos must be non-empty, browser-playable, have a readable finite duration
+and be at most 100 MB. The old `pricing.html#registration` URL redirects to
+`register.html`; Pricing remains a separate calculator and video-preview page.
 | `contact.html`        | `src/pages/Contact.tsx`        | Campaign handoff and local enquiry draft  |
 | `login.html`          | `src/pages/Login.tsx`          | Client email and password login            |
-| `dashboard.html`      | `src/pages/Dashboard.tsx`      | Sample advertiser dashboard               |
-| `profile.html`        | `src/pages/Profile.tsx`        | Sample advertiser profile                 |
-| `create-ad.html`      | `src/pages/CreateAd.tsx`       | Campaign setup and local creative preview |
-| `advertisements.html` | `src/pages/Advertisements.tsx` | Searchable sample advertisement list      |
-| `view-ad.html?id=...` | `src/pages/ViewAd.tsx`         | Campaign overview and creative preview    |
-| `payments.html`       | `src/pages/Payments.tsx`       | Sample billing and transaction history    |
+| `dashboard.html`      | `src/pages/Dashboard.tsx`      | Account campaign overview and saved setup |
+| `profile.html`        | `src/pages/Profile.tsx`        | Current account and saved name            |
+| `create-ad.html`      | `src/pages/CreateAd.tsx`       | Campaign submission and creative upload   |
+| `advertisements.html` | `src/pages/Advertisements.tsx` | Owned campaign list and filters           |
+| `view-ad.html?id=...` | `src/pages/ClientViewAd.tsx`   | Real campaign, creative and playback history |
+| `payments.html`       | `src/pages/Payments.tsx`       | Account payment history and CSV export    |
 | `admin-login.html`    | `src/pages/AdminLogin.tsx`     | Separate website-admin demo sign-in       |
 | `admin.html`          | `src/pages/AdminPortal.tsx`    | Clients, enquiries, cabs and ad approvals |
 
@@ -186,10 +190,11 @@ are illustrative rather than a live countdown.
 Portal headings and summary cards use brief staggered entrance effects, with
 soft card highlights and table-row hover/focus feedback. Reduced-motion settings
 disable these entrance effects; content remains visible without animation.
-The profile page supports editing business and contact details, with Save and
-Cancel actions. Profiles persist in browser local storage separately for each
-demo sign-in email; changing the contact email does not change sign-in credentials.
-These changes are not sent to a server.
+The client profile reads `GET /api/Users/me` and saves the supported account-name
+field through `PUT /api/Users/me`. Email and phone are read-only; unsupported
+business fields are not presented as saved account information. Payment history
+reads `GET /api/Payments/history` with pagination and exports displayed records.
+No sample payments, invented account balances or tax invoices are shown.
 
 The home page includes reference-inspired feedback cards with sample ratings
 and initial avatars, plus a three-column footer with quick links and Hyderabad
@@ -210,17 +215,24 @@ Client sign-in uses the registered email as the username and posts the password 
 backend's HTTPS development certificate (`dotnet dev-certs https --trust`) if needed.
 For other environments, set `VITE_API_BASE_URL` to their backend origin; when unset,
 requests go to the website's origin. The backend must allow the website's origin
-through CORS. An active Client account
-must already exist in the backend. Tokens are stored in session storage and cleared
-on sign-out. The portal still uses browser-local sample data and its route gate is
-not a security boundary; backend authorization must protect real data. The portal
-includes example campaign metrics and profile details, a searchable sample
-advertisement list, sample campaign detail and billing pages, and campaign
-creation tools that reuse the local video preview and illustrative budget
-estimator. Demo campaigns created in the portal are saved in this browser's
-`localStorage` with a pending status; they are not sent for approval. Drafts and
-sample reports are downloaded locally; no videos are uploaded and nothing is
-charged. Existing local branding,
+through CORS. An active Client account must already exist in the backend. Tokens are
+stored in session storage and cleared on sign-out. The Create Ad page now creates a
+campaign through `POST /api/Advertisements`, then uploads the selected MP4, WebM or
+MOV through `POST /api/Advertisements/{id}/upload-video` and the optional banner
+through `POST /api/Advertisements/{id}/upload-image`, using the client token.
+Upload retries reuse the saved campaign; a banner-only retry does not upload the
+video again. Pending file details survive a refresh in the same tab. In a new
+session, open the campaign details to add any missing creative. Uploading does not
+collect a payment. Created campaigns appear in My advertisements and the dashboard.
+The client campaign list loads all pages of `GET /api/Advertisements/my-ads`.
+Overview metrics and the 14-day UTC activity chart use `GET /api/ClientDashboard/summary`.
+Cab activity counts distinct vehicles with recorded plays, not requested cab slots.
+Campaign details use owner-checked `/api/ClientDashboard/campaigns/{id}/creative`
+for 15-minute private preview URLs and `/playback` for date-filtered recorded plays
+with pagination. No fabricated locations or sample charts are used in client views.
+Missing data, load failures and empty results have separate visible states.
+Deploy the updated backend before the frontend; restart an existing local debug
+session to load the new controller endpoints. Existing local branding,
 system fonts, and a cropped cab image from the supplied visual reference are used.
 The reference-inspired design includes a photo-backed hero, yellow headline
 underline, circular step icons, and an anchored services strip. The cab scene is
@@ -369,9 +381,10 @@ Use `npm run format` to format source and configuration.
   estimate. It is an illustration, not a quotation or reservation. Taxes and
   final placement details apply at checkout; availability and delivery
   commitments require confirmation.
-- Contact fields download a local text draft only. Nothing is sent, uploaded or stored on a
-  backend. The site has no admin login, payment integration or server video uploads;
-  the campaign studio supports private local video previews only.
+- Contact fields download a local text draft only. Registration and Create Ad use
+  the backend for campaign creation and video uploads. Registration also uploads
+  its banner and verifies payment through the backend. The sample admin portal
+  remains browser-local.
 - Verified phone, WhatsApp, email, address and business hours remain explicit placeholders.
   Add real, approved details and publish Privacy and Terms before a business launch.
 - Confirm pricing, screen specifications, creative rules, fleet availability and reporting.
@@ -384,7 +397,12 @@ Use `npm run format` to format source and configuration.
 
 ## Razorpay payments
 
-The registration flow ends with a Razorpay Checkout payment step. Copy `.env.example` to `.env` and set `VITE_RAZORPAY_KEY_ID` (use an `rzp_test_` key for testing), then rebuild. This static site has no backend, so orders and payment signatures are not verified server-side and refunds are issued from the Razorpay dashboard.
+Registration uses the backend Razorpay configuration, not `VITE_RAZORPAY_KEY_ID`.
+For testing, configure Razorpay test credentials on the backend. Checkout reuses
+the order for the campaign and checks its status before reopening; only a verified
+capture sends the campaign for review. Refunds require separate processing.
+Apply the backend's `database\migrations\20261118-registration-drafts.sql` to an
+existing database before running the updated backend, then use the updated frontend.
 
 ## Driver portal
 

@@ -366,21 +366,29 @@ test("client campaign can be approved with plays and INR amount and stays unsche
   });
   await seedDemoSession(page, "new-client@example.com");
   await expect(page).toHaveURL(/dashboard\.html$/);
-  await page.goto("create-ad.html");
-  await page.getByLabel("Advertisement name").fill("Admin review journey");
-  await page.locator("#ad-banner").setInputFiles({
-    name: "admin-review.png",
-    mimeType: "image/png",
-    buffer: Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/pysAAAAASUVORK5CYII=",
-      "base64",
-    ),
-  });
-  await page.getByLabel("Select Starter plan").check();
-  await page.getByRole("button", { name: /Submit ad for review/ }).click();
-  await expect(page).toHaveURL(/view-ad\.html\?id=/);
+  const id = "admin-review-journey";
+  await page.evaluate((campaignId) => {
+    localStorage.setItem("adrover-demo-advertisements", JSON.stringify([{
+      id: campaignId,
+      ownerEmail: "new-client@example.com",
+      name: "Admin review journey",
+      brand: "Admin review journey",
+      initials: "AR",
+      area: "Hyderabad",
+      submitted: "2026-11-17",
+      dates: "Start date pending approval",
+      status: "Pending approval",
+      plays: 0,
+      target: 10000,
+      elapsedDays: 0,
+      totalDays: 7,
+      cabs: 0,
+      fleet: "Fleet reservation is not confirmed",
+      note: "Local demo campaign",
+    }]));
+  }, id);
+  await page.goto(`view-ad.html?id=${id}`);
   const clientAdUrl = page.url();
-  const id = new URL(clientAdUrl).searchParams.get("id")!;
 
   await signInAdmin(page);
   await expect(page.locator(".dashboard-stat").first()).toContainText("7");
@@ -397,7 +405,7 @@ test("client campaign can be approved with plays and INR amount and stays unsche
   await page.getByLabel("Total campaign amount").fill("18750.50");
   await page.locator(".admin-confirm input").check();
   await page.getByRole("button", { name: /Approve ad/ }).click();
-  await expect(page.getByRole("status")).toContainText("Ad approved");
+  await expect(page.locator(".admin-success")).toContainText("Ad approved");
   await expect(page.locator(".view-ad-status-bar")).toContainText("Approved");
   await expect(page.locator(".view-ad-status-bar")).toContainText(
     "awaiting payment/scheduling",

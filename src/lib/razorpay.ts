@@ -10,6 +10,7 @@ type RazorpayOptions = {
   currency: "INR";
   name: string;
   description: string;
+  order_id?: string;
   prefill?: { name?: string; email?: string; contact?: string };
   notes?: Record<string, string>;
   theme?: { color: string };
@@ -58,6 +59,35 @@ export type PaymentRequest = {
 
 export type PaymentResult =
   { status: "paid"; paymentId: string } | { status: "cancelled" };
+
+export async function checkoutOrder(order: {
+  orderId: string; keyId: string; amount: number; currency: string;
+}, onCheckoutChange?: (open: boolean) => void): Promise<RazorpaySuccess | null> {
+  if (!order.orderId || !order.keyId || order.currency !== "INR") {
+    throw new Error("A valid backend payment order is required. No payment was started.");
+  }
+  await loadCheckout();
+  const Razorpay = window.Razorpay;
+  if (!Razorpay) throw new Error("Razorpay could not be loaded.");
+  onCheckoutChange?.(true);
+  try {
+    return await new Promise<RazorpaySuccess | null>((resolve, reject) => {
+      let paymentError: Error | undefined;
+      const checkout = new Razorpay({
+        key: order.keyId, order_id: order.orderId, amount: Math.round(order.amount * 100),
+        currency: "INR", name: "Adrover", description: "Advertisement campaign",
+        handler: resolve, modal: { ondismiss: () => paymentError ? reject(paymentError) : resolve(null) },
+      });
+      checkout.on("payment.failed", (response) => {
+        paymentError = new Error(response.error.description ?? "Payment failed. Check payment status before retrying.");
+        if (!onCheckoutChange) reject(paymentError);
+      });
+      checkout.open();
+    });
+  } finally {
+    onCheckoutChange?.(false);
+  }
+}
 
 export async function payWithRazorpay(
   request: PaymentRequest,

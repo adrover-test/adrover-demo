@@ -22,6 +22,7 @@ test("client login uses the backend and creates a session only after successful 
   await page.getByLabel("Password").fill("correct-password");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/dashboard\.html$/);
+  await page.waitForLoadState("domcontentloaded");
   expect(await page.evaluate(() => sessionStorage.getItem("adrover-client-token"))).toBe("access-token");
   expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem("adrover-demo-session") ?? "null"))).toEqual({ email: "client@example.com" });
   expect(submissions).toEqual([
@@ -29,6 +30,8 @@ test("client login uses the backend and creates a session only after successful 
     { email: "client@example.com", password: "correct-password" },
   ]);
   await page.locator(".portal-exit").click();
+  await expect(page).toHaveURL(/login\.html\?signedOut=1$/);
+  await page.waitForLoadState("domcontentloaded");
   expect(await page.evaluate(() => sessionStorage.getItem("adrover-client-token"))).toBeNull();
   expect(await page.evaluate(() => sessionStorage.getItem("adrover-client-refresh-token"))).toBeNull();
 });

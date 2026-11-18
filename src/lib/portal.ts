@@ -274,28 +274,28 @@ export function getDemoEmail() {
   return value.email;
 }
 
+export function getDashboardDraftUrl(id: string) {
+  return /^[a-z0-9-]{1,80}$/i.test(id)
+    ? `dashboard.html?draft=${encodeURIComponent(id)}`
+    : "dashboard.html";
+}
+
 export function requireDemoSession(filename: string, search: string) {
   if (!portalPages.has(filename) || isDemoSessionActive()) return;
 
   const candidate = new URL(`${filename}${search}`, window.location.href);
-  const safeFilename = candidate.pathname.split("/").pop() ?? "";
-  const next =
-    portalPages.has(safeFilename) && candidate.origin === window.location.origin
-      ? safeFilename === "view-ad.html"
-        ? `${safeFilename}?id=${encodeURIComponent(candidate.searchParams.get("id") ?? "")}`
-        : safeFilename
-      : "dashboard.html";
+  const next = getPortalDestination(candidate);
   window.location.replace(`login.html?next=${encodeURIComponent(next)}`);
 }
 
-export function getDemoRedirect(search: string) {
-  const requested = new URLSearchParams(search).get("next");
-  if (!requested) return "dashboard.html";
-
-  const candidate = new URL(requested, window.location.origin);
+function getPortalDestination(candidate: URL) {
   const filename = candidate.pathname.split("/").pop() ?? "";
   if (!portalPages.has(filename) || candidate.origin !== window.location.origin)
     return "dashboard.html";
+
+  if (filename === "dashboard.html") {
+    return getDashboardDraftUrl(candidate.searchParams.get("draft") ?? "");
+  }
 
   if (filename === "view-ad.html") {
     const id = candidate.searchParams.get("id") ?? "";
@@ -304,6 +304,13 @@ export function getDemoRedirect(search: string) {
   }
 
   return filename;
+}
+
+export function getDemoRedirect(search: string) {
+  const requested = new URLSearchParams(search).get("next");
+  if (!requested) return "dashboard.html";
+
+  return getPortalDestination(new URL(requested, window.location.origin));
 }
 
 function isAdvertisement(value: unknown): value is Advertisement {

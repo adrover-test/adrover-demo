@@ -1,23 +1,19 @@
 import { useState } from "react";
 import { PortalSidebar } from "../components/PortalSidebar";
-import { getAdvertiserAdvertisements } from "../lib/portal";
+import { SavedRegistrations } from "../components/SavedRegistrations";
+import {
+  getClientCampaigns,
+  getDashboardSummary,
+} from "../lib/clientCampaignApi";
+import { useClientResource } from "../lib/useClientResource";
 
-const dailyPlays = [
-  ["23", 7200],
-  ["24", 8400],
-  ["25", 9100],
-  ["26", 10000],
-  ["27", 9600],
-  ["28", 11600],
-  ["29", 12200],
-  ["30", 10800],
-  ["31", 13400],
-  ["01", 14200],
-  ["02", 13800],
-  ["03", 15100],
-  ["04", 16000],
-  ["Today", 14800],
-] as const;
+async function loadOverview() {
+  const [campaigns, summary] = await Promise.all([
+    getClientCampaigns(),
+    getDashboardSummary(),
+  ]);
+  return { campaigns, summary };
+}
 
 const numberFormat = new Intl.NumberFormat("en-IN");
 const shortDate = new Intl.DateTimeFormat("en-IN", {
@@ -28,14 +24,11 @@ const shortDate = new Intl.DateTimeFormat("en-IN", {
 
 export function Dashboard() {
   const [activeSection, setActiveSection] = useState("#overview");
-  const [allAds] = useState(getAdvertiserAdvertisements);
-  const pendingCount = allAds.filter(
-    (advertisement) => advertisement.status === "Pending approval",
-  ).length;
-  const totalPlays = allAds.reduce(
-    (total, advertisement) => total + advertisement.plays,
-    0,
-  );
+  const { data, loading, error, refresh } = useClientResource(loadOverview);
+  const allAds = data?.campaigns ?? [];
+  const pendingCount = data?.summary.pendingAdvertisements;
+  const dailyPlays = data?.summary.dailyPlays ?? [];
+  const maxDailyPlays = Math.max(1, ...dailyPlays.map((entry) => entry.plays));
   const recentAds = [...allAds]
     .sort((left, right) => right.submitted.localeCompare(left.submitted))
     .slice(0, 4);
@@ -54,8 +47,7 @@ export function Dashboard() {
             <span className="eyebrow">ADVERTISER DASHBOARD</span>
             <h1>Welcome back, Advertiser</h1>
             <p>
-              Here&apos;s a simple overview of how your campaigns could perform
-              across Hyderabad.
+              Track your campaigns, completed plays and next steps in one place.
             </p>
           </div>
           <div className="dashboard-heading-actions">
@@ -65,13 +57,16 @@ export function Dashboard() {
           </div>
         </header>
 
-        <div className="dashboard-sample-note" role="note">
-          <strong>Campaign overview</strong>
-          <span>
-            All campaign, cab and play figures below are illustrative—not live
-            account data.
-          </span>
-        </div>
+        <SavedRegistrations resumeInDashboard onChanged={refresh} />
+        {loading && <p role="status">Loading your campaign overview...</p>}
+        {error && (
+          <div role="alert" className="error">
+            <p>{error}</p>
+            <button className="button ghost small" onClick={refresh}>
+              Try again
+            </button>
+          </div>
+        )}
 
         <section className="dashboard-stats" aria-label="Campaign summary">
           <article className="dashboard-stat">
@@ -79,12 +74,12 @@ export function Dashboard() {
               AD
             </span>
             <span className="dashboard-stat-label">Total advertisements</span>
-            <strong>{allAds.length}</strong>
+            <strong>{data ? data.summary.totalAdvertisements : "—"}</strong>
             <span className="dashboard-stat-foot">
               <span>
-                {allAds.filter((ad) => ad.status === "Active").length} active
+                {data ? data.summary.activeAdvertisements : "—"} active
               </span>
-              <span>{pendingCount} pending</span>
+              <span>{pendingCount ?? "—"} pending</span>
             </span>
           </article>
           <article className="dashboard-stat">
@@ -92,25 +87,29 @@ export function Dashboard() {
               ↗
             </span>
             <span className="dashboard-stat-label">Total ad plays</span>
-            <strong>{numberFormat.format(totalPlays)}</strong>
-            <span className="dashboard-stat-foot dashboard-stat-positive">
-              Up 18.4% this week
-            </span>
+            <strong>
+              {data ? numberFormat.format(data.summary.totalPlays) : "—"}
+            </strong>
+            <span className="dashboard-stat-foot">Recorded campaign plays</span>
           </article>
           <article className="dashboard-stat">
             <span className="dashboard-stat-icon cabs" aria-hidden="true">
               CAB
             </span>
-            <span className="dashboard-stat-label">Active cabs</span>
-            <strong>342</strong>
-            <span className="dashboard-stat-foot">Across 4 routes</span>
+            <span className="dashboard-stat-label">Cabs playing your ads</span>
+            <strong>
+              {data ? numberFormat.format(data.summary.activeCabs) : "—"}
+            </strong>
+            <span className="dashboard-stat-foot">
+              Recorded over the last 14 days
+            </span>
           </article>
           <article className="dashboard-stat">
             <span className="dashboard-stat-icon pending" aria-hidden="true">
               !
             </span>
             <span className="dashboard-stat-label">Pending approvals</span>
-            <strong>{pendingCount} ads</strong>
+            <strong>{pendingCount ?? "—"} ads</strong>
             <span className="dashboard-stat-foot">Needs a review</span>
           </article>
         </section>
@@ -120,12 +119,16 @@ export function Dashboard() {
             <div className="dashboard-panel-heading">
               <div>
                 <h2>Daily ad plays</h2>
-                <p>Campaign activity over the last 14 days</p>
+                <p>Recorded activity over the last 14 days (UTC)</p>
               </div>
               <span className="dashboard-panel-tag">14-day trend</span>
             </div>
             <div
-              aria-label="Daily plays rise from 7,200 to 14,800 over 14 days"
+              aria-label={
+                data
+                  ? `Daily ad plays: ${dailyPlays.map((entry) => `${entry.date}: ${entry.plays}`).join(", ")}`
+                  : "Daily ad plays unavailable"
+              }
               className="plays-chart"
               role="img"
             >
@@ -136,14 +139,16 @@ export function Dashboard() {
                 <span />
               </div>
               <div className="plays-bars">
-                {dailyPlays.map(([day, plays], index) => (
-                  <div className="plays-bar-column" key={`${day}-${index}`}>
+                {dailyPlays.map(({ date, plays }, index) => (
+                  <div
+                    className="plays-bar-column"
+                    key={date}
+                    title={`${date}: ${numberFormat.format(plays)} plays`}
+                  >
                     <span className="plays-bar-value">
-                      {index === dailyPlays.length - 1
-                        ? "14.8k"
-                        : index === 0
-                          ? "7.2k"
-                          : ""}
+                      {index === dailyPlays.length - 1 || index === 0
+                        ? numberFormat.format(plays)
+                        : ""}
                     </span>
                     <span
                       className={
@@ -152,18 +157,23 @@ export function Dashboard() {
                           : "plays-bar"
                       }
                       style={{
-                        height: `${(plays / 17000) * 100}%`,
+                        height: `${(plays / maxDailyPlays) * 100}%`,
+                        minHeight: plays === 0 ? 0 : undefined,
                         animationDelay: `${index * 45}ms`,
                       }}
                     />
-                    <span className="plays-bar-day">{day}</span>
+                    <span className="plays-bar-day">{date.slice(8)}</span>
                   </div>
                 ))}
               </div>
             </div>
             <div className="plays-chart-footer">
               <span>Daily plays</span>
-              <strong>14,800 today</strong>
+              <strong>
+                {data
+                  ? `${numberFormat.format(dailyPlays.at(-1)?.plays ?? 0)} today`
+                  : "Activity unavailable"}
+              </strong>
             </div>
           </section>
         </div>
@@ -193,6 +203,13 @@ export function Dashboard() {
                 </tr>
               </thead>
               <tbody>
+                {!loading && !error && recentAds.length === 0 && (
+                  <tr>
+                    <td colSpan={5}>
+                      No campaigns yet. Create your first ad to get started.
+                    </td>
+                  </tr>
+                )}
                 {recentAds.map((advertisement) => (
                   <tr key={advertisement.id}>
                     <th scope="row">
@@ -241,10 +258,8 @@ export function Dashboard() {
             </span>
             <h2>Payments &amp; history</h2>
             <p>
-              Billing tools are not part of this preview. Payment records will
-              appear here when account services are connected.
+              Review your payments and download a statement for your records.
             </p>
-            <span className="dashboard-coming-soon">Not connected</span>
             <a className="dashboard-profile-link" href="payments.html">
               View billing history →
             </a>
@@ -254,7 +269,7 @@ export function Dashboard() {
               DA
             </span>
             <h2>Your profile</h2>
-            <p>Enterprise advertiser</p>
+            <p>Your advertiser account</p>
             <span className="dashboard-profile-foot">
               Review and update your business information.
             </span>

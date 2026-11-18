@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { PortalSidebar } from "../components/PortalSidebar";
-import {
-  type Advertisement,
-  type AdvertisementStatus,
-} from "../lib/advertisements";
-import { getAdvertiserAdvertisements } from "../lib/portal";
+import { type AdvertisementStatus } from "../lib/advertisements";
+import { getClientCampaigns } from "../lib/clientCampaignApi";
+import { useClientResource } from "../lib/useClientResource";
+import { SavedRegistrations } from "../components/SavedRegistrations";
 
 const filters = [
   "All ads",
@@ -12,6 +11,9 @@ const filters = [
   "Pending approval" satisfies AdvertisementStatus,
   "Approved" satisfies AdvertisementStatus,
   "Completed" satisfies AdvertisementStatus,
+  "Draft" satisfies AdvertisementStatus,
+  "Rejected" satisfies AdvertisementStatus,
+  "Cancelled" satisfies AdvertisementStatus,
 ] as const;
 
 type StatusFilter = (typeof filters)[number];
@@ -31,22 +33,9 @@ export function Advertisements() {
   const [filter, setFilter] = useState<StatusFilter>("All ads");
   const [search, setSearch] = useState("");
   const [sortOrder, setSortOrder] = useState<SortOrder>("recent");
-  const [savedAds, setSavedAds] = useState<Advertisement[]>([]);
-  const [storageError, setStorageError] = useState("");
-
-  useEffect(() => {
-    try {
-      setSavedAds(getAdvertiserAdvertisements());
-    } catch (error) {
-      setStorageError(
-        error instanceof Error
-          ? error.message
-          : "Saved demo campaigns could not be loaded.",
-      );
-    }
-  }, []);
-
-  const allAds = savedAds;
+  const { data, loading, error, refresh } =
+    useClientResource(getClientCampaigns);
+  const allAds = useMemo(() => data ?? [], [data]);
 
   const filteredAds = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
@@ -73,6 +62,9 @@ export function Advertisements() {
       .length,
     Completed: allAds.filter((ad) => ad.status === "Completed").length,
     Approved: allAds.filter((ad) => ad.status === "Approved").length,
+    Draft: allAds.filter((ad) => ad.status === "Draft").length,
+    Rejected: allAds.filter((ad) => ad.status === "Rejected").length,
+    Cancelled: allAds.filter((ad) => ad.status === "Cancelled").length,
   };
 
   return (
@@ -95,12 +87,16 @@ export function Advertisements() {
           </div>
         </header>
 
-      
-        {storageError && (
-          <p className="error" role="alert">
-            {storageError}
-          </p>
+        {loading && <p role="status">Loading your campaigns...</p>}
+        {error && (
+          <div role="alert" className="error">
+            <p>{error}</p>
+            <button className="button ghost small" onClick={refresh}>
+              Try again
+            </button>
+          </div>
         )}
+        <SavedRegistrations />
 
         <section
           aria-label="Advertisement summary"
@@ -111,7 +107,7 @@ export function Advertisements() {
               AD
             </span>
             <span className="dashboard-stat-label">Total advertisements</span>
-            <strong>{allAds.length} campaigns</strong>
+            <strong>{data ? `${allAds.length} campaigns` : "—"}</strong>
             <span className="dashboard-stat-foot">
               {counts.Active} active · {counts["Pending approval"]} pending
             </span>
@@ -121,7 +117,13 @@ export function Advertisements() {
               ↗
             </span>
             <span className="dashboard-stat-label">Plays delivered</span>
-            <strong>148,250</strong>
+            <strong>
+              {data
+                ? numberFormat.format(
+                    allAds.reduce((sum, ad) => sum + ad.plays, 0),
+                  )
+                : "—"}
+            </strong>
             <span className="dashboard-stat-foot">
               Across active and completed campaigns
             </span>
@@ -130,9 +132,24 @@ export function Advertisements() {
             <span className="dashboard-stat-icon cabs" aria-hidden="true">
               CAB
             </span>
-            <span className="dashboard-stat-label">Active cab coverage</span>
-            <strong>342 cabs</strong>
-            <span className="dashboard-stat-foot">Hyderabad routes</span>
+            <span className="dashboard-stat-label">
+              Requested cab placements
+            </span>
+            <strong>
+              {data
+                ? numberFormat.format(
+                    allAds
+                      .filter(
+                        (ad) =>
+                          ad.status !== "Cancelled" && ad.status !== "Rejected",
+                      )
+                      .reduce((sum, ad) => sum + ad.cabs, 0),
+                  )
+                : "—"}
+            </strong>
+            <span className="dashboard-stat-foot">
+              Across your campaigns; not a unique cab count
+            </span>
           </article>
         </section>
 
@@ -192,7 +209,10 @@ export function Advertisements() {
           className="ad-list"
         >
           {filteredAds.map((ad, index) => {
-            const progress = Math.round((ad.plays / ad.target) * 100);
+            const progress =
+              ad.target > 0
+                ? Math.min(100, Math.round((ad.plays / ad.target) * 100))
+                : 0;
             return (
               <article
                 className="ad-list-card"
@@ -252,8 +272,16 @@ export function Advertisements() {
                       : ad.status === "Pending approval"
                         ? "Starts after review"
                         : ad.status === "Approved"
-                          ? "Awaiting payment/scheduling"
-                          : "Delivery progress"}
+                          ? ad.paidAmount >= ad.amount
+                            ? "Awaiting scheduling"
+                            : "Awaiting payment"
+                          : ad.status === "Draft"
+                            ? "Complete campaign setup"
+                            : ad.status === "Rejected"
+                              ? "Changes required"
+                              : ad.status === "Cancelled"
+                                ? "Not running"
+                                : "Delivery progress"}
                   </span>
                 </div>
 
@@ -272,7 +300,7 @@ export function Advertisements() {
                         ? "Completed"
                         : ad.status === "Approved"
                           ? "Approved"
-                          : "Active"}
+                          : ad.status}
                   </strong>
                   <span>
                     {ad.status === "Active"
@@ -288,7 +316,7 @@ export function Advertisements() {
                       : ad.status === "Pending approval" ||
                           ad.status === "Approved"
                         ? `${ad.cabs} cabs requested · not confirmed`
-                        : `${ad.cabs} active cabs`}
+                        : `${ad.cabs} requested cab placements`}
                   </span>
                 </div>
 
@@ -301,7 +329,7 @@ export function Advertisements() {
               </article>
             );
           })}
-          {filteredAds.length === 0 && (
+          {!loading && !error && filteredAds.length === 0 && (
             <div className="ad-list-empty">
               <h2>No matching advertisements</h2>
               <p>Try a different search or status filter.</p>

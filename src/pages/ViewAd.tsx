@@ -144,7 +144,7 @@ export function ViewAd({
         <div className="dashboard-sample-note" role="note">
           <strong>Campaign information</strong>
           <span>
-            Included campaigns are illustrative. Campaigns you create stay in
+            Included campaigns are illustrative. Campaigns saved here remain in
             this browser and are not sent for real approval.
           </span>
         </div>

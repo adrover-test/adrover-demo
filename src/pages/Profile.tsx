@@ -1,93 +1,77 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { PortalSidebar } from "../components/PortalSidebar";
 import {
-  getDemoEmail,
-  getSavedProfile,
-  saveProfile,
-  type AdvertiserProfile,
-} from "../lib/portal";
-
-const profileDetails = [
-  ["Account name", "accountName"],
-  ["Business name", "businessName"],
-  ["Business email", "email"],
-  ["Phone number", "phone"],
-  ["Primary service area", "area"],
-  ["Advertiser type", "advertiserType"],
-] as const;
+  getClientProfile,
+  updateClientProfile,
+  type ClientProfile,
+} from "../lib/clientAccountApi";
 
 export function Profile() {
-  const [profile, setProfile] = useState<AdvertiserProfile>(() => ({
-    accountName: "Advertiser",
-    businessName: "Your business",
-    email: getDemoEmail(),
-    phone: "",
-    area: "Hyderabad, Telangana",
-    advertiserType: "Enterprise advertiser",
-  }));
-  const [draft, setDraft] = useState(profile);
+  const [profile, setProfile] = useState<ClientProfile | null>(null);
+  const [draftName, setDraftName] = useState("");
   const [editing, setEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const editButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    try {
-      const saved = getSavedProfile();
-      if (saved) {
-        setProfile(saved);
-        setDraft(saved);
-      }
-    } catch (loadError) {
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Saved profile could not be loaded in this browser.",
-      );
-    }
-  }, []);
+    let active = true;
+    setLoading(true);
+    setError("");
+    getClientProfile()
+      .then((result) => {
+        if (active) setProfile(result);
+      })
+      .catch((failure: unknown) => {
+        if (active)
+          setError(
+            failure instanceof Error
+              ? failure.message
+              : "We couldn't load your profile. Please try again.",
+          );
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [retry]);
 
   function finishEditing() {
     setEditing(false);
     requestAnimationFrame(() => editButton.current?.focus());
   }
 
-  function handleSave(event: FormEvent<HTMLFormElement>) {
+  async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const updated = {
-      accountName: draft.accountName.trim(),
-      businessName: draft.businessName.trim(),
-      email: draft.email.trim(),
-      phone: draft.phone.trim(),
-      area: draft.area.trim(),
-      advertiserType: draft.advertiserType.trim(),
-    };
-    if (
-      !updated.accountName ||
-      !updated.businessName ||
-      !updated.area ||
-      !updated.advertiserType
-    ) {
-      setError("Required fields must contain text, not just spaces.");
+    const name = draftName.trim();
+    if (name.length < 2) {
+      setError("Please enter a name with at least 2 characters.");
       return;
     }
+    setSaving(true);
+    setError("");
     try {
-      saveProfile(updated);
+      const updated = await updateClientProfile(name);
       setProfile(updated);
-      setDraft(updated);
-      setError("");
-      setStatus("Profile saved in this browser.");
+      setStatus("Your account name has been updated.");
       finishEditing();
-    } catch (saveError) {
+    } catch (failure) {
       setError(
-        saveError instanceof Error
-          ? saveError.message
-          : "Your profile could not be saved in this browser.",
+        failure instanceof Error
+          ? failure.message
+          : "We couldn't save your changes. Please try again.",
       );
+    } finally {
+      setSaving(false);
     }
   }
 
-  const initials = profile.accountName
+  const initials = (profile?.name ?? "")
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
@@ -100,9 +84,9 @@ export function Profile() {
       <div className="dashboard-content profile-content">
         <header className="dashboard-heading">
           <div>
-            <span className="eyebrow">ADVERTISER PORTAL</span>
+            <span className="eyebrow">CLIENT ACCOUNT</span>
             <h1>Your profile</h1>
-            <p>Review and update your business and contact details.</p>
+            <p>Review your account details and update your name.</p>
           </div>
           <div className="dashboard-heading-actions">
             <a className="button yellow small" href="dashboard.html">
@@ -111,183 +95,161 @@ export function Profile() {
           </div>
         </header>
 
-        <div className="dashboard-sample-note" role="note">
-          <strong>Profile storage</strong>
-          <span>
-            Changes are saved only in this browser for this sign-in. Updating
-            your contact email does not change your sign-in email.
-          </span>
-        </div>
-
-        <section className="dashboard-panel profile-identity">
-          <span aria-hidden="true" className="profile-avatar-large">
-            {initials}
-          </span>
-          <div className="profile-identity-copy">
-            <span className="profile-overline">{profile.advertiserType}</span>
-            <h2>{profile.accountName}</h2>
-            <p>
-              {profile.businessName} · {profile.area}
-            </p>
+        {loading ? (
+          <p role="status">Loading your profile…</p>
+        ) : error && !profile ? (
+          <div className="dashboard-panel" role="alert">
+            <p>{error}</p>
+            <button
+              className="button yellow small"
+              onClick={() => setRetry((value) => value + 1)}
+              type="button"
+            >
+              Try again
+            </button>
           </div>
-          <span className="campaign-status profile-demo-status">
-            Advertiser account
-          </span>
-        </section>
-
-        <div className="profile-panels">
-          <section
-            aria-labelledby="profile-details-heading"
-            className="dashboard-panel profile-details"
-          >
-            <div className="dashboard-panel-heading">
-              <div>
-                <h2 id="profile-details-heading">Business details</h2>
-                <p>Contact and organization information</p>
-              </div>
-              <button
-                className="button ghost small"
-                ref={editButton}
-                type="button"
-                disabled={editing}
-                onClick={() => {
-                  setDraft(profile);
-                  setStatus("");
-                  setEditing(true);
-                }}
-              >
-                Edit profile
-              </button>
-            </div>
-            {editing ? (
-              <form className="profile-edit-form" onSubmit={handleSave}>
-                <div className="fields">
-                  {profileDetails.map(([label, field]) => (
-                    <div className="field" key={field}>
-                      <label htmlFor={`profile-${field}`}>
-                        {label}
-                        {field !== "phone" ? " *" : ""}
-                      </label>
-                      <input
-                        autoFocus={field === "accountName"}
-                        id={`profile-${field}`}
-                        name={field}
-                        type={
-                          field === "email"
-                            ? "email"
-                            : field === "phone"
-                              ? "tel"
-                              : "text"
-                        }
-                        maxLength={
-                          field === "phone" ? 30 : field === "email" ? 254 : 150
-                        }
-                        pattern={
-                          field === "phone"
-                            ? "[+0-9\\(\\) .\\-]{7,30}"
-                            : undefined
-                        }
-                        title={
-                          field === "phone"
-                            ? "Use 7–30 characters: digits, spaces, +, parentheses, dots or hyphens."
-                            : undefined
-                        }
-                        required={field !== "phone"}
-                        value={draft[field]}
-                        onChange={(event) =>
-                          setDraft((current) => ({
-                            ...current,
-                            [field]: event.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                  ))}
-                </div>
-                <div className="profile-edit-actions">
-                  <button className="button yellow small" type="submit">
-                    Save changes
-                  </button>
-                  <button
-                    className="button ghost small"
-                    type="button"
-                    onClick={() => {
-                      setDraft(profile);
-                      setStatus("");
-                      finishEditing();
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <dl className="profile-details-grid">
-                {profileDetails.map(([label, field]) => (
-                  <div className="profile-detail" key={field}>
-                    <dt>{label}</dt>
-                    <dd>{profile[field] || "Not provided"}</dd>
-                  </div>
-                ))}
-              </dl>
-            )}
-            <p className="error" role="alert">
-              {error}
-            </p>
-            <p className="fine" role="status">
-              {status}
-            </p>
-          </section>
-
-          <section
-            aria-labelledby="profile-access-heading"
-            className="dashboard-panel profile-access"
-          >
-            <div className="dashboard-panel-heading">
-              <div>
-                <h2 id="profile-access-heading">Account access</h2>
-                <p>Workspace and storage information</p>
-              </div>
-              <span aria-hidden="true" className="profile-panel-icon">
-                ✓
+        ) : profile ? (
+          <>
+            <div className="dashboard-sample-note" role="note">
+              <strong>Account details</strong>
+              <span>
+                Your account name can be changed here. Contact details are shown
+                as listed on your account.
               </span>
             </div>
-            <ul className="profile-access-list">
-              <li>
-                <span>Portal mode</span>
-                <strong>Browser-local</strong>
-              </li>
-              <li>
-                <span>Sign-in verification</span>
-                <strong>Not connected</strong>
-              </li>
-              <li>
-                <span>Profile updates</span>
-                <strong>Saved in this browser</strong>
-              </li>
-              <li>
-                <span>Campaign metrics</span>
-                <strong>Illustrative</strong>
-              </li>
-            </ul>
-          </section>
-        </div>
 
-        <section className="profile-help-card">
-          <span aria-hidden="true" className="profile-help-mark">
-            ?
-          </span>
-          <div>
-            <h2>Need help with your account?</h2>
-            <p>
-              Contact Adrover to discuss campaign requirements or profile
-              information.
-            </p>
+            <section className="dashboard-panel profile-identity">
+              <span aria-hidden="true" className="profile-avatar-large">
+                {initials || "A"}
+              </span>
+              <div className="profile-identity-copy">
+                <span className="profile-overline">Client account</span>
+                <h2>{profile.name || "Name not provided"}</h2>
+                <p>{profile.email || "Email not provided"}</p>
+              </div>
+            </section>
+
+            <div className="profile-panels">
+              <section
+                aria-labelledby="profile-details-heading"
+                className="dashboard-panel profile-details"
+              >
+                <div className="dashboard-panel-heading">
+                  <div>
+                    <h2 id="profile-details-heading">Account details</h2>
+                    <p>
+                      Your name can be changed here. Contact details are
+                      read-only.
+                    </p>
+                  </div>
+                  {!editing && (
+                    <button
+                      className="button ghost small"
+                      ref={editButton}
+                      type="button"
+                      onClick={() => {
+                        setDraftName(profile.name);
+                        setError("");
+                        setStatus("");
+                        setEditing(true);
+                      }}
+                    >
+                      Edit name
+                    </button>
+                  )}
+                </div>
+                {editing ? (
+                  <form className="profile-edit-form" onSubmit={handleSave}>
+                    <div className="fields">
+                      <div className="field">
+                        <label htmlFor="profile-name">Account name</label>
+                        <input
+                          autoFocus
+                          id="profile-name"
+                          name="name"
+                          maxLength={100}
+                          minLength={2}
+                          required
+                          value={draftName}
+                          onChange={(event) => setDraftName(event.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="profile-edit-actions">
+                      <button
+                        className="button yellow small"
+                        type="submit"
+                        disabled={saving}
+                      >
+                        {saving ? "Saving…" : "Save changes"}
+                      </button>
+                      <button
+                        className="button ghost small"
+                        type="button"
+                        disabled={saving}
+                        onClick={() => {
+                          setDraftName(profile.name);
+                          setError("");
+                          finishEditing();
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <dl className="profile-details-grid">
+                    <div className="profile-detail">
+                      <dt>Account name</dt>
+                      <dd>{profile.name || "Not provided"}</dd>
+                    </div>
+                    <div className="profile-detail">
+                      <dt>Email address</dt>
+                      <dd>{profile.email || "Not provided"}</dd>
+                    </div>
+                    <div className="profile-detail">
+                      <dt>Phone number</dt>
+                      <dd>{profile.phone || "Not provided"}</dd>
+                    </div>
+                  </dl>
+                )}
+                <p className="error" role="alert">
+                  {error}
+                </p>
+                <p className="fine" role="status">
+                  {status}
+                </p>
+              </section>
+            </div>
+
+            <section className="profile-help-card">
+              <span aria-hidden="true" className="profile-help-mark">
+                ?
+              </span>
+              <div>
+                <h2>Need help with your account?</h2>
+                <p>
+                  Contact Adrover to discuss campaign requirements or profile
+                  information.
+                </p>
+              </div>
+              <a className="button yellow small" href="contact.html">
+                Contact us
+              </a>
+            </section>
+          </>
+        ) : (
+          <div className="dashboard-panel" role="status">
+            <p>Your profile details aren't available yet.</p>
+            <button
+              className="button yellow small"
+              onClick={() => setRetry((value) => value + 1)}
+              type="button"
+            >
+              Try again
+            </button>
           </div>
-          <a className="button yellow small" href="contact.html">
-            Contact us
-          </a>
-        </section>
+        )}
       </div>
     </section>
   );

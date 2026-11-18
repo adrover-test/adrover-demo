@@ -57,6 +57,7 @@ export async function registerClient(details: {
   phone: string;
   fullName: string;
   password: string;
+  advertisement?: import("./advertisementApi").RegistrationProgress;
 }) {
   const data = await post("/register", { ...details, role: "Client" });
   if (

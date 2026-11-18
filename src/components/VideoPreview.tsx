@@ -4,8 +4,12 @@ const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
 export function VideoPreview({
   onContinue,
+  onVideoChange,
+  disabled = false,
 }: {
   onContinue?: (file: File, details: string) => void;
+  onVideoChange?: (file: File | null, durationSeconds?: number) => void;
+  disabled?: boolean;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
@@ -31,6 +35,7 @@ export function VideoPreview({
     setDetails("");
     setPlaying(false);
     setError("");
+    onVideoChange?.(null);
   }
 
   return (
@@ -47,23 +52,29 @@ export function VideoPreview({
         <div className="video-upload-box">
           <label htmlFor="campaign-video">Choose your video</label>
           <p id="video-guidance">
-            MP4 or WebM · up to 100 MB · browser-supported codecs.
+            {onVideoChange ? "MP4, WebM or MOV" : "MP4 or WebM"} · up to 100 MB · browser-supported codecs.
           </p>
           <input
             id="campaign-video"
             type="file"
-            accept="video/mp4,video/webm,.mp4,.webm"
+            accept={onVideoChange ? "video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" : "video/mp4,video/webm,.mp4,.webm"}
             aria-describedby="video-guidance video-privacy video-error"
             aria-invalid={Boolean(error)}
+            disabled={disabled}
             onChange={(event) => {
               const selected = event.target.files?.[0];
               event.target.value = "";
               if (!selected) return;
               clearVideo();
-              if (!["video/mp4", "video/webm"].includes(selected.type)) {
-                setError(
-                  "Choose an MP4 or WebM video. Other file types cannot be previewed.",
-                );
+              const extension = selected.name.split(".").pop()?.toLowerCase();
+              if (
+                !(onVideoChange ? ["mp4", "webm", "mov"] : ["mp4", "webm"]).includes(extension ?? "") ||
+                (selected.type &&
+                  !(onVideoChange ? ["video/mp4", "video/webm", "video/quicktime"] : ["video/mp4", "video/webm"]).includes(
+                    selected.type,
+                  ))
+              ) {
+                setError("Choose an MP4, WebM or MOV video.");
                 return;
               }
               if (selected.size === 0 || selected.size > MAX_VIDEO_BYTES) {
@@ -71,11 +82,13 @@ export function VideoPreview({
                 return;
               }
               setFile(selected);
+              onVideoChange?.(selected);
             }}
           />
           <p id="video-privacy" className="fine">
-            Local preview only; not uploaded or attached to your enquiry.
-            Leaving or refreshing clears it.
+            {onVideoChange
+              ? "The video is uploaded and attached when you submit the campaign. Previewing alone does not upload it."
+              : "Local preview only; not uploaded or attached to your enquiry. Leaving or refreshing clears it."}
           </p>
           <p id="video-error" className="error" role="alert" hidden={!error}>
             {error}
@@ -84,7 +97,7 @@ export function VideoPreview({
             <div className="video-file-details">
               <strong>{file.name}</strong>
               <span>{(file.size / 1024 / 1024).toFixed(1)} MB</span>
-              <button className="text-link" type="button" onClick={clearVideo}>
+              <button className="text-link" type="button" onClick={clearVideo} disabled={disabled}>
                 Remove video
               </button>
             </div>
@@ -142,17 +155,22 @@ export function VideoPreview({
                 onLoadedMetadata={(event) => {
                   const video = event.currentTarget;
                   if (video.videoWidth === 0 || video.videoHeight === 0) {
+                    onVideoChange?.(null);
                     setError(
                       "This file does not contain a supported video. Try exporting it as MP4 (H.264) or WebM.",
                     );
                     return;
                   }
-                  const duration = Number.isFinite(video.duration)
-                    ? `${Math.ceil(video.duration)} seconds`
-                    : "duration unavailable";
+                  if (!Number.isFinite(video.duration) || video.duration <= 0) {
+                    setError("The video duration could not be read. Choose another file.");
+                    onVideoChange?.(null);
+                    return;
+                  }
+                  const duration = `${Math.ceil(video.duration)} seconds`;
                   setDetails(
                     `${video.videoWidth} × ${video.videoHeight} · ${duration}`,
                   );
+                  onVideoChange?.(file, video.duration);
                 }}
                 onPlay={() => setPlaying(true)}
                 onPause={() => setPlaying(false)}
@@ -160,6 +178,7 @@ export function VideoPreview({
                 onError={() => {
                   setPlaying(false);
                   setDetails("");
+                  onVideoChange?.(null);
                   setError(
                     "This video could not be played. Try another file or export as MP4 (H.264) or WebM.",
                   );
