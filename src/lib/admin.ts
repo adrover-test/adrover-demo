@@ -7,6 +7,9 @@ import {
 
 const adminSessionKey = "adrover-demo-admin-session";
 const enquiryUpdatesKey = "adrover-enquiry-updates";
+const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? "https://localhost:7100")
+  .trim()
+  .replace(/\/$/, "");
 
 export type EnquiryUpdate = {
   id: string;
@@ -15,6 +18,123 @@ export type EnquiryUpdate = {
   updatedBy: string;
   updatedAt: string;
 };
+
+export type AdminDashboardSummary = {
+  clientsPresent: number;
+  enquiries: number;
+  cabsInDirectory: number;
+  adsAwaitingApproval: number;
+  totalAds: number;
+  totalAdPlays: number;
+  totalRevenueTillDate: number;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function field(record: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (key in record) return record[key];
+  }
+  return undefined;
+}
+
+function summaryCount(
+  record: Record<string, unknown>,
+  keys: string[],
+  label: string,
+): number {
+  const value = field(record, keys);
+  const number =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : NaN;
+  if (!Number.isFinite(number) || number < 0) {
+    throw new Error(`Admin ${label} could not be loaded.`);
+  }
+  return number;
+}
+
+export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary> {
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/api/admin/dashboard/summary`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new Error("Could not reach the admin dashboard service.");
+  }
+
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {
+    // Non-JSON response.
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      response.status === 401 || response.status === 403
+        ? "You do not have permission to view the admin dashboard summary."
+        : "The admin dashboard summary could not be loaded.",
+    );
+  }
+
+  const body =
+    isRecord(payload) && payload.success === true && "data" in payload
+      ? payload.data
+      : payload;
+  if (!isRecord(body)) {
+    throw new Error("The admin dashboard summary response was invalid.");
+  }
+
+  return {
+    clientsPresent: summaryCount(
+      body,
+      ["clientsPresent", "totalClients", "clients", "clientCount"],
+      "client count",
+    ),
+    enquiries: summaryCount(
+      body,
+      ["enquiries", "totalEnquiries", "enquiryCount"],
+      "enquiry count",
+    ),
+    cabsInDirectory: summaryCount(
+      body,
+      ["cabsInDirectory", "totalCabs", "cabs", "cabCount", "driversCount"],
+      "cab count",
+    ),
+    adsAwaitingApproval: summaryCount(
+      body,
+      [
+        "adsAwaitingApproval",
+        "pendingApprovals",
+        "pendingAdvertisements",
+        "adsPendingApproval",
+      ],
+      "pending approval count",
+    ),
+    totalAds: summaryCount(
+      body,
+      ["totalAds", "advertisements", "advertisementCount"],
+      "advertisement count",
+    ),
+    totalAdPlays: summaryCount(
+      body,
+      ["totalAdPlays", "adPlays", "totalPlays", "plays"],
+      "ad play count",
+    ),
+    totalRevenueTillDate: summaryCount(
+      body,
+      ["totalRevenueTillDate", "totalRevenue", "collectedRevenue", "revenue"],
+      "revenue",
+    ),
+  };
+}
 
 function getEnquiryUpdates(): EnquiryUpdate[] {
   const serialized = localStorage.getItem(enquiryUpdatesKey);

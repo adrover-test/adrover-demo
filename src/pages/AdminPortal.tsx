@@ -3,15 +3,16 @@ import {
   getCabDrivers,
   getAdminClients,
   getAdminEnquiries,
+  getAdminDashboardSummary,
 } from "../lib/admin";
 import { CreateDriver } from "../components/CreateDriver";
 import { approveAdvertisement, getAllAdvertisements } from "../lib/portal";
 import type { Advertisement } from "../lib/advertisements";
 import { moneyFormat, numberFormat } from "../lib/campaign";
 import { ViewAd } from "./ViewAd";
-import { getCollectedCampaignRevenue } from "../lib/billing";
 import { AdminCharts } from "../components/AdminCharts";
 import { EnquiryFollowUp } from "../components/EnquiryFollowUp";
+import { useClientResource } from "../lib/useClientResource";
 
 const sections = [
   ["dashboard", "Overview"],
@@ -149,6 +150,11 @@ function ApprovalForm({
 
 export function AdminPortal() {
   const [result, setResult] = useState(loadData);
+  const {
+    data: dashboardSummary,
+    error: dashboardSummaryError,
+    refresh: refreshDashboardSummary,
+  } = useClientResource(getAdminDashboardSummary);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [enquiryFilter, setEnquiryFilter] = useState<
@@ -304,7 +310,10 @@ export function AdminPortal() {
             </p>
             <button
               className="button ghost small"
-              onClick={() => setResult(loadData())}
+              onClick={() => {
+                setResult(loadData());
+                refreshDashboardSummary();
+              }}
             >
               Retry loading
             </button>
@@ -318,25 +327,33 @@ export function AdminPortal() {
                   {[
                     [
                       "Clients present",
-                      data.clients.length,
+                      dashboardSummary
+                        ? numberFormat.format(dashboardSummary.clientsPresent)
+                        : "—",
                       "clients",
                       "View clients",
                     ],
                     [
                       "Enquiries",
-                      data.enquiries.length,
+                      dashboardSummary
+                        ? numberFormat.format(dashboardSummary.enquiries)
+                        : "—",
                       "enquiries",
                       "View enquiries",
                     ],
                     [
                       "Cabs in directory",
-                      data.cabs.length,
+                      dashboardSummary
+                        ? numberFormat.format(dashboardSummary.cabsInDirectory)
+                        : "—",
                       "cabs",
                       "View cabs",
                     ],
                     [
                       "Ads awaiting approval",
-                      pending.length,
+                      dashboardSummary
+                        ? numberFormat.format(dashboardSummary.adsAwaitingApproval)
+                        : "—",
                       "approvals",
                       "Review ads",
                     ],
@@ -359,7 +376,11 @@ export function AdminPortal() {
                 >
                   <article className="dashboard-stat">
                     <span className="dashboard-stat-label">Total ads</span>
-                    <strong>{numberFormat.format(data.ads.length)}</strong>
+                    <strong>
+                      {dashboardSummary
+                        ? numberFormat.format(dashboardSummary.totalAds)
+                        : "—"}
+                    </strong>
                     <span className="dashboard-stat-foot">
                       All clients and campaign statuses
                     </span>
@@ -367,12 +388,9 @@ export function AdminPortal() {
                   <article className="dashboard-stat">
                     <span className="dashboard-stat-label">Total ad plays</span>
                     <strong>
-                      {numberFormat.format(
-                        data.ads.reduce(
-                          (total, advertisement) => total + advertisement.plays,
-                          0,
-                        ),
-                      )}
+                      {dashboardSummary
+                        ? numberFormat.format(dashboardSummary.totalAdPlays)
+                        : "—"}
                     </strong>
                     <span className="dashboard-stat-foot">
                       Delivered plays across all advertisements
@@ -383,18 +401,26 @@ export function AdminPortal() {
                       Total revenue till date
                     </span>
                     <strong>
-                      {moneyFormat.format(getCollectedCampaignRevenue())}
+                      {dashboardSummary
+                        ? moneyFormat.format(dashboardSummary.totalRevenueTillDate)
+                        : "—"}
                     </strong>
                     <span className="dashboard-stat-foot">
                       Collected campaign payments minus refunds
                     </span>
                   </article>
                 </section>
-                <p className="fine">
-                  Revenue excludes wallet top-ups, pending payments and unpaid
-                  approvals. Illustrative billing records only, not live
-                  revenue.
-                </p>
+                {dashboardSummaryError && (
+                  <p className="error" role="alert">
+                    {dashboardSummaryError}{" "}
+                    <button
+                      className="button ghost small"
+                      onClick={refreshDashboardSummary}
+                    >
+                      Retry summary
+                    </button>
+                  </p>
+                )}
                 <section className="dashboard-panel admin-section">
                   <AdminCharts ads={data.ads} />
                 </section>
