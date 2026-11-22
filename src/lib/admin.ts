@@ -5,6 +5,7 @@ import {
   getSavedProfile,
 } from "./portal";
 import { getClientToken } from "./clientAuth";
+import type { ChartRange } from "./chartPeriods";
 
 const adminSessionKey = "adrover-demo-admin-session";
 const enquiryUpdatesKey = "adrover-enquiry-updates";
@@ -28,6 +29,20 @@ export type AdminDashboardSummary = {
   totalAds: number;
   totalAdPlays: number;
   totalRevenueTillDate: number;
+};
+
+export type OperationsOverviewPoint = {
+  key: string;
+  label: string;
+  value: number;
+};
+
+export type AdminOperationsOverview = {
+  adPlays: OperationsOverviewPoint[];
+  campaignRevenue: OperationsOverviewPoint[];
+  statusCounts: Record<"Active" | "Pending approval" | "Approved" | "Completed", number>;
+  totalAds: number;
+  periodPlays: number;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -59,6 +74,67 @@ function summaryCount(
   return number;
 }
 
+function numericField(record: Record<string, unknown>, keys: string[]): number {
+  const value = field(record, keys);
+  const number =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : NaN;
+  return Number.isFinite(number) ? number : 0;
+}
+
+function parseOverviewPoints(
+  value: unknown,
+  valueKeys: string[],
+): OperationsOverviewPoint[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry, index) => {
+      if (!isRecord(entry)) return null;
+      const key =
+        String(
+          field(entry, ["key", "id", "periodKey", "date", "month", "period"]),
+        ) || `point-${index + 1}`;
+      const label =
+        String(field(entry, ["label", "name", "periodLabel", "month"]) ?? "") ||
+        key;
+      const number = numericField(entry, valueKeys);
+      return { key, label, value: number };
+    })
+    .filter((entry): entry is OperationsOverviewPoint => entry !== null);
+}
+
+function statusCountFrom(
+  source: Record<string, unknown>,
+  primaryKey: string,
+  fallbackKeys: string[],
+): number {
+  const nested = field(source, ["statusCounts", "statuses", "statusSummary"]);
+  if (isRecord(nested)) {
+    return Math.max(
+      0,
+      Math.floor(numericField(nested, [primaryKey, ...fallbackKeys])),
+    );
+  }
+  const statusList = field(source, ["advertisementsByStatus", "statusBreakdown"]);
+  if (Array.isArray(statusList)) {
+    const target = [primaryKey, ...fallbackKeys].map((value) =>
+      value.toLowerCase().replaceAll(" ", ""),
+    );
+    const matched = statusList.find((item) => {
+      if (!isRecord(item)) return false;
+      const status = String(field(item, ["status", "name"]) ?? "")
+        .toLowerCase()
+        .replaceAll(" ", "");
+      return target.includes(status);
+    });
+    if (isRecord(matched)) return Math.max(0, Math.floor(numericField(matched, ["count", "value", "total"])));
+  }
+  return Math.max(0, Math.floor(numericField(source, [primaryKey, ...fallbackKeys])));
+}
+
 function adminRequestHeaders(includeAuth = true): Record<string, string> {
   const token = getClientToken();
   const headers: Record<string, string> = { Accept: "application/json" };
@@ -76,13 +152,21 @@ async function adminGet(path: string, includeAuth = true): Promise<Response> {
   });
 }
 
+let dashboardSummaryInFlight: Promise<AdminDashboardSummary> | null = null;
+const operationsOverviewInFlight: Partial<
+  Record<ChartRange, Promise<AdminOperationsOverview>>
+> = {};
+
 export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary> {
-  let response: Response;
-  try {
-    response = await adminGet("/api/admin/dashboard/summary");
-  } catch {
-    throw new Error("Could not reach the admin dashboard service.");
-  }
+  if (dashboardSummaryInFlight) return dashboardSummaryInFlight;
+
+  dashboardSummaryInFlight = (async () => {
+    let response: Response;
+    try {
+      response = await adminGet("/api/admin/dashboard/summary");
+    } catch {
+      throw new Error("Could not reach the admin dashboard service.");
+    }
 
   let payload: unknown = null;
   try {
@@ -107,49 +191,149 @@ export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary>
     throw new Error("The admin dashboard summary response was invalid.");
   }
 
-  return {
-    clientsPresent: summaryCount(
-      body,
-      ["clientsPresent", "totalClients", "clients", "clientCount"],
-      "client count",
-    ),
-    enquiries: summaryCount(
-      body,
-      ["enquiries", "totalEnquiries", "enquiryCount"],
-      "enquiry count",
-    ),
-    cabsInDirectory: summaryCount(
-      body,
-      ["cabsInDirectory", "totalCabs", "cabs", "cabCount", "driversCount"],
-      "cab count",
-    ),
-    adsAwaitingApproval: summaryCount(
-      body,
-      [
-        "adsAwaitingApproval",
-        "pendingApprovals",
-        "pendingAdvertisements",
-        "adsPendingApproval",
-      ],
-      "pending approval count",
-    ),
-    totalAds: summaryCount(
-      body,
-      ["totalAds", "advertisements", "advertisementCount"],
-      "advertisement count",
-    ),
-    totalAdPlays: summaryCount(
-      body,
-      ["totalAdPlays", "adPlays", "totalPlays", "plays"],
-      "ad play count",
-    ),
-    totalRevenueTillDate: summaryCount(
-      body,
-      ["totalRevenueTillDate", "totalRevenue", "collectedRevenue", "revenue"],
-      "revenue",
-    ),
-  };
-}
+      return {
+        clientsPresent: summaryCount(
+          body,
+          ["clientsPresent", "totalClients", "clients", "clientCount"],
+          "client count",
+        ),
+        enquiries: summaryCount(
+          body,
+          ["enquiries", "totalEnquiries", "enquiryCount"],
+          "enquiry count",
+        ),
+        cabsInDirectory: summaryCount(
+          body,
+          ["cabsInDirectory", "totalCabs", "cabs", "cabCount", "driversCount"],
+          "cab count",
+        ),
+        adsAwaitingApproval: summaryCount(
+          body,
+          [
+            "adsAwaitingApproval",
+            "pendingApprovals",
+            "pendingAdvertisements",
+            "adsPendingApproval",
+          ],
+          "pending approval count",
+        ),
+        totalAds: summaryCount(
+          body,
+          ["totalAds", "advertisements", "advertisementCount"],
+          "advertisement count",
+        ),
+        totalAdPlays: summaryCount(
+          body,
+          ["totalAdPlays", "adPlays", "totalPlays", "plays"],
+          "ad play count",
+        ),
+        totalRevenueTillDate: summaryCount(
+          body,
+          ["totalRevenueTillDate", "totalRevenue", "collectedRevenue", "revenue"],
+          "revenue",
+        ),
+      };
+    })();
+
+    try {
+      return await dashboardSummaryInFlight;
+    } finally {
+      dashboardSummaryInFlight = null;
+    }
+  }
+
+  export async function getAdminOperationsOverview(
+  range: ChartRange,
+): Promise<AdminOperationsOverview> {
+  const cached = operationsOverviewInFlight[range];
+  if (cached) return cached;
+
+  operationsOverviewInFlight[range] = (async () => {
+    let response: Response;
+    try {
+      response = await adminGet(
+        `/api/admin/dashboard/operations-overview?range=${encodeURIComponent(range)}`,
+      );
+    } catch {
+      throw new Error("Could not reach the admin operations overview service.");
+    }
+
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {
+    // Non-JSON response.
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      response.status === 401 || response.status === 403
+        ? "You do not have permission to view operations overview data."
+        : "The operations overview could not be loaded.",
+    );
+  }
+
+  const body =
+    isRecord(payload) && payload.success === true && "data" in payload
+      ? payload.data
+      : payload;
+  if (!isRecord(body)) {
+    throw new Error("The operations overview response was invalid.");
+  }
+
+      const adPlays = parseOverviewPoints(
+        field(body, ["monthlyAdPlays", "adPlays", "plays", "playsByPeriod"]),
+        ["totalPlays", "value", "plays", "count", "total"],
+      );
+      const campaignRevenue = parseOverviewPoints(
+        field(body, [
+          "monthlyCampaignRevenue",
+          "campaignRevenue",
+          "revenue",
+          "revenueByPeriod",
+        ]),
+        ["netRevenue", "value", "amount", "revenue", "total"],
+      );
+      const statusCounts = {
+        Active: statusCountFrom(body, "Active", ["active"]),
+        "Pending approval": statusCountFrom(body, "Pending approval", [
+          "pendingApproval",
+          "pendingApprovals",
+          "PendingApproval",
+        ]),
+        Approved: statusCountFrom(body, "Approved", ["approved"]),
+        Completed: statusCountFrom(body, "Completed", ["completed"]),
+      } as const;
+      return {
+        adPlays,
+        campaignRevenue,
+        statusCounts,
+        totalAds: Math.max(
+          0,
+          Math.floor(
+            numericField(body, ["totalAds", "advertisements", "advertisementCount"]),
+          ),
+        ),
+        periodPlays: Math.max(
+          0,
+          Math.floor(
+            numericField(body, [
+              "totalAdPlaysInPeriod",
+              "periodPlays",
+              "totalAdPlays",
+              "totalPlays",
+            ]),
+          ),
+        ),
+      };
+    })();
+
+    try {
+      return await operationsOverviewInFlight[range]!;
+    } finally {
+      delete operationsOverviewInFlight[range];
+    }
+  }
 
 function getEnquiryUpdates(): EnquiryUpdate[] {
   const serialized = localStorage.getItem(enquiryUpdatesKey);
@@ -361,9 +545,6 @@ export async function getAdminClientsFromApi(): Promise<AdminClient[]> {
     let response: Response;
     try {
       response = await adminGet("/api/admin/clients");
-      if (response.status === 401 && getClientToken()) {
-        response = await adminGet("/api/admin/clients", false);
-      }
     } catch {
       throw new Error("Could not reach the admin clients service.");
     }

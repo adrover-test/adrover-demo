@@ -1,9 +1,8 @@
-import type { Advertisement } from "../lib/advertisements";
-import { useState } from "react";
-import { getCampaignRevenueByPeriod } from "../lib/billing";
+import { useCallback, useState } from "react";
 import { moneyFormat, numberFormat } from "../lib/campaign";
-import { getAdPlaysByPeriod } from "../lib/adPlays";
 import { chartRanges, type ChartRange } from "../lib/chartPeriods";
+import { getAdminOperationsOverview } from "../lib/admin";
+import { useClientResource } from "../lib/useClientResource";
 
 const statuses = [
   "Active",
@@ -13,25 +12,23 @@ const statuses = [
 ] as const;
 const colors = ["#087a45", "#d4a20b", "#4377ae", "#8b998b"];
 
-export function AdminCharts({ ads }: { ads: Advertisement[] }) {
+export function AdminCharts() {
   const [range, setRange] = useState<ChartRange>("monthly");
   const selectedRange = chartRanges.find((entry) => entry.value === range)!;
-  const asOf = new Date();
-  const playMonths = getAdPlaysByPeriod(ads, range, asOf);
+  const loadOverview = useCallback(() => getAdminOperationsOverview(range), [range]);
+  const { data, loading, error, refresh } = useClientResource(loadOverview);
+  const playMonths = data?.adPlays ?? [];
   const maxPlays = Math.max(...playMonths.map((month) => month.value), 1);
-  const periodPlays = playMonths.reduce(
-    (total, month) => total + month.value,
-    0,
-  );
-  const months = getCampaignRevenueByPeriod(range, asOf);
+  const periodPlays =
+    data?.periodPlays ??
+    playMonths.reduce((total, month) => total + month.value, 0);
+  const months = data?.campaignRevenue ?? [];
   const maxAmount = Math.max(
     ...months.map((month) => Math.abs(month.value)),
     1,
   );
-  const counts = statuses.map(
-    (status) => ads.filter((ad) => ad.status === status).length,
-  );
-  const total = ads.length;
+  const counts = statuses.map((status) => data?.statusCounts[status] ?? 0);
+  const total = data?.totalAds ?? 0;
   let offset = 0;
   const segments = counts.map((count, index) => {
     const share = total ? (count / total) * 100 : 0;
@@ -67,9 +64,15 @@ export function AdminCharts({ ads }: { ads: Advertisement[] }) {
           ))}
         </select>
         <p className="fine">
-          Applies to ad plays and revenue. UTC calendar periods include the
-          current partial period. No recorded history is shown as zero.
+          Data is loaded from admin operations overview. UTC calendar periods
+          include the current partial period.
         </p>
+        {loading && <p className="fine">Loading operations overview...</p>}
+        {error && (
+          <p className="error" role="alert">
+            {error} <button className="button ghost small" onClick={refresh}>Retry charts</button>
+          </p>
+        )}
       </div>
       <article className="dashboard-panel admin-chart-panel admin-plays-panel">
         <div className="dashboard-panel-heading">
@@ -85,8 +88,7 @@ export function AdminCharts({ ads }: { ads: Advertisement[] }) {
           </span>
         </div>
         <p className="fine">
-          Illustrative monthly history for sample ads only, not live delivery.
-          New ads have no delivery history; assigned play targets are excluded.
+          Delivered plays from operations overview across all clients.
         </p>
         <div
           className="admin-chart-scroll"
@@ -142,8 +144,7 @@ export function AdminCharts({ ads }: { ads: Advertisement[] }) {
           <span className="dashboard-panel-tag">INR</span>
         </div>
         <p className="fine">
-          Illustrative billing records; wallet deposits and unpaid approvals
-          excluded.
+          Net collected payments after refunds from operations overview.
         </p>
         <div
           className="admin-chart-scroll"

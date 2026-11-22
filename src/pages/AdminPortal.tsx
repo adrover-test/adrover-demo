@@ -221,7 +221,7 @@ export function AdminPortal() {
         (entry.update?.status ?? "Awaiting reply") === enquiryFilter) &&
       matches(entry.name, entry.business, entry.email, entry.message),
   );
-  const clients = apiClients ?? data?.clients ?? [];
+  const clients = apiClients ?? [];
   const ad = data?.ads.find((entry) => entry.id === id);
   const client = clients.find((entry) => entry.id === id);
   const cab = data?.cabs.find((entry) => entry.id === id);
@@ -453,7 +453,7 @@ export function AdminPortal() {
                   </p>
                 )}
                 <section className="dashboard-panel admin-section">
-                  <AdminCharts ads={data.ads} />
+                  <AdminCharts />
                 </section>
                 <section className="dashboard-panel admin-section">
                   <div className="dashboard-panel-heading">
