@@ -8,6 +8,7 @@ import {
 } from "../lib/admin";
 import { CreateDriver } from "../components/CreateDriver";
 import { EditDriver } from "../components/EditDriver";
+import { DriverOperations } from "../components/DriverOperations";
 import { listDrivers } from "../lib/driverAdminApi";
 import type { AdminEnquiry, CabDriver } from "../lib/admin";
 import { approveAdvertisement, getAllAdvertisements } from "../lib/portal";
@@ -958,6 +959,7 @@ export function AdminPortal() {
                         refreshCabs();
                       }}
                     />
+                    <DriverOperations key={cab.id} driverId={cab.id} />
                   </section>
                 ) : cabsError ? (
                   <p className="error" role="alert">

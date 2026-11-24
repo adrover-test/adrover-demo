@@ -41,6 +41,7 @@
   "vehicle.lastSync": "టాబ్లెట్ చివరి సింక్",
   "vehicle.tablet.online": "కనెక్ట్ అయింది",
   "vehicle.tablet.offline": "కనెక్ట్ కాలేదు",
+  "vehicle.tablet.unknown": "కనెక్షన్ నిర్ధారించబడలేదు",
   "vehicle.tablet.not_assigned": "టాబ్లెట్ కేటాయించలేదు",
   "vehicle.approval.approved": "ఆమోదించారు",
   "vehicle.approval.pending": "ఆమోదం కోసం వేచి ఉంది",

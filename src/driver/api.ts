@@ -6,9 +6,10 @@ const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? "https://localhost:7100")
 const tokenKey = "adrover-driver-token";
 const apiRoot = "/api/v1/drivers";
 
-export type TabletStatus = "online" | "offline" | "not_assigned";
+export type TabletStatus = "online" | "offline" | "not_assigned" | "unknown";
 export type ApprovalStatus = "approved" | "pending" | "rejected";
-export type AdStatus = "upcoming" | "playing" | "completed" | "failed";
+export type AdStatus =
+  "upcoming" | "playing" | "completed" | "failed" | "paused";
 export type PaymentStatus = "released" | "processing" | "pending" | "failed";
 export type IssueStatus =
   "submitted" | "under_review" | "in_progress" | "resolved" | "rejected";

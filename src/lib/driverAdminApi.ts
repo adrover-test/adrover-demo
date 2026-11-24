@@ -1,4 +1,10 @@
 import { getAdminToken, type CabDriver } from "./admin";
+import type {
+  Earnings,
+  IssueDetail,
+  IssueSummary,
+  Payment,
+} from "../driver/api";
 
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? "")
   .trim()
@@ -161,4 +167,80 @@ export async function saveDriverUpdate(
       ...(password ? { password } : {}),
     }),
   });
+}
+
+export type DriverAssignment = {
+  id: string;
+  advertisementId: string;
+  name: string;
+  scheduledAt: string;
+  targetPlays: number;
+  ratePerPlay: number;
+  status: "assigned" | "paused" | "completed";
+  playsCompleted: number;
+};
+
+export type DriverOperations = {
+  campaigns: { id: string; name: string; startDate: string; endDate: string }[];
+  assignments: DriverAssignment[];
+  earnings: Earnings;
+  payouts: Payment[];
+  issues: { summary: IssueSummary; confirmed: boolean }[];
+};
+
+export async function getDriverOperations(
+  id: string,
+): Promise<DriverOperations> {
+  const data = await send(`/${encodeURIComponent(id)}/operations`, {
+    method: "GET",
+  });
+  if (
+    typeof data !== "object" ||
+    data === null ||
+    !("campaigns" in data) ||
+    !Array.isArray(data.campaigns) ||
+    !("assignments" in data) ||
+    !Array.isArray(data.assignments) ||
+    !("payouts" in data) ||
+    !Array.isArray(data.payouts) ||
+    !("issues" in data) ||
+    !Array.isArray(data.issues) ||
+    !("earnings" in data) ||
+    typeof data.earnings !== "object" ||
+    data.earnings === null
+  )
+    throw new Error("The driver operations response was invalid.");
+  return data as DriverOperations;
+}
+
+export async function updateDriverOperation(
+  id: string,
+  path: string,
+  method: "POST" | "PUT",
+  body: Record<string, unknown>,
+): Promise<void> {
+  await send(`/${encodeURIComponent(id)}${path}`, {
+    method,
+    body: JSON.stringify(body),
+  });
+}
+
+export async function getDriverIssue(
+  id: string,
+  issueId: string,
+): Promise<IssueDetail> {
+  const data = await send(
+    `/${encodeURIComponent(id)}/issues/${encodeURIComponent(issueId)}`,
+    { method: "GET" },
+  );
+  if (
+    typeof data !== "object" ||
+    data === null ||
+    !("id" in data) ||
+    data.id !== issueId ||
+    !("history" in data) ||
+    !Array.isArray(data.history)
+  )
+    throw new Error("The driver issue response was invalid.");
+  return data as IssueDetail;
 }

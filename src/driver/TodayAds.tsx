@@ -8,6 +8,7 @@ const tone: Record<AdStatus, string> = {
   playing: "info",
   completed: "good",
   failed: "bad",
+  paused: "wait",
 };
 
 type Tab = "schedule" | "upcoming" | "completed" | "history";

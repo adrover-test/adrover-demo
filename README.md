@@ -83,8 +83,18 @@ is stored and it cannot be viewed again. Generated passwords use short parts
 of the driver's name, vehicle number and phone plus random characters, and
 are at most 20 characters. Regenerate it when necessary.
 Drivers sign in at `driver-login.html` with their mobile number and password.
-The backend driver profile is available; the other driver dashboard services
-are not yet implemented.
+Driver profiles persist address, language and private photos. Dashboard,
+assigned schedules, playback history, earnings, payouts, notifications and
+support tickets use the backend. Under a cab's **View details → Driver
+operations**, administrators assign campaigns with INR-per-play rates, record
+independently verified playback, schedule/update payouts, send notifications
+and respond to support tickets. Each assignment covers one UTC day; form
+timestamps are entered locally and sent as ISO UTC. Rates are immutable.
+Payouts are ledger records only: transfer funds separately, then record the
+external payment reference. Device connection is unverified until a heartbeat
+integration exists. Backend setup requires
+`database/migrations/20261124-driver-operations.sql` after the driver directory
+script and configured private Azure Blob Storage for photos/attachments.
 It also shows total ads across every client/status and total revenue till date
 from the shared sample billing records. Revenue counts successful campaign
 payments minus refunded campaign amounts, excluding wallet top-ups, pending
