@@ -1,7 +1,7 @@
 import { demoApi } from "./demo";
 import type { Lang } from "./i18n";
 
-const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? "")
+const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? "https://localhost:7100")
   .trim()
   .replace(/\/$/, "");
 const tokenKey = "adrover-driver-token";

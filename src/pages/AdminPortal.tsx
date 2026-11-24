@@ -207,7 +207,7 @@ export function AdminPortal() {
   const query = search.trim().toLowerCase();
   const matches = (...values: string[]) =>
     values.join(" ").toLowerCase().includes(query);
-  const enquiries = apiEnquiries ?? data?.enquiries ?? [];
+  const enquiries = apiEnquiries ?? [];
   const enquiryCounts = {
     All: enquiries.length,
     "Awaiting reply":
@@ -215,12 +215,18 @@ export function AdminPortal() {
     Replied:
       enquiries.filter((entry) => entry.update?.status === "Replied").length,
   };
-  const filteredEnquiries = enquiries.filter(
-    (entry) =>
-      (enquiryFilter === "All" ||
-        (entry.update?.status ?? "Awaiting reply") === enquiryFilter) &&
-      matches(entry.name, entry.business, entry.email, entry.message),
-  );
+  const filteredEnquiries = enquiries
+    .filter(
+      (entry) =>
+        (enquiryFilter === "All" ||
+          (entry.update?.status ?? "Awaiting reply") === enquiryFilter) &&
+        matches(entry.name, entry.business, entry.email, entry.message),
+    )
+    .sort(
+      (left, right) =>
+        Number((left.update?.status ?? "Awaiting reply") === "Replied") -
+        Number((right.update?.status ?? "Awaiting reply") === "Replied"),
+    );
   const clients = apiClients ?? [];
   const ad = data?.ads.find((entry) => entry.id === id);
   const client = clients.find((entry) => entry.id === id);

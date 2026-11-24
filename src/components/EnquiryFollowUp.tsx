@@ -18,11 +18,11 @@ export function EnquiryFollowUp({
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaved("");
     try {
-      saveEnquiryUpdate(id, status, note);
+      await saveEnquiryUpdate(id, status, note);
       setNote("");
       setError("");
       setSaved("Enquiry follow-up saved.");

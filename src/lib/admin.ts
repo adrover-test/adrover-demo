@@ -152,6 +152,21 @@ async function adminGet(path: string, includeAuth = true): Promise<Response> {
   });
 }
 
+async function adminPut(
+  path: string,
+  body: Record<string, unknown>,
+  includeAuth = true,
+): Promise<Response> {
+  return fetch(`${baseUrl}${path}`, {
+    method: "PUT",
+    headers: {
+      ...adminRequestHeaders(includeAuth),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+}
+
 let dashboardSummaryInFlight: Promise<AdminDashboardSummary> | null = null;
 const operationsOverviewInFlight: Partial<
   Record<ChartRange, Promise<AdminOperationsOverview>>
@@ -370,7 +385,7 @@ function getEnquiryUpdates(): EnquiryUpdate[] {
   return value;
 }
 
-export function saveEnquiryUpdate(
+export async function saveEnquiryUpdate(
   id: string,
   status: EnquiryUpdate["status"],
   note: string,
@@ -382,8 +397,38 @@ export function saveEnquiryUpdate(
     throw new Error("Internal notes must be 2,000 characters or fewer.");
   if (note.length > 0 && !note.trim())
     throw new Error("Enter a note containing text, not just spaces.");
-  if (!getAdminEnquiries().some((enquiry) => enquiry.id === id))
-    throw new Error("This enquiry no longer exists. Reload the list.");
+  if (!id.trim()) throw new Error("Choose a valid enquiry before saving.");
+
+  let response: Response;
+  try {
+    response = await adminPut(
+      `/api/admin/enquiries/${encodeURIComponent(id)}/follow-up`,
+      {
+        replyStatus: status,
+        internalNote: note.trim(),
+      },
+    );
+  } catch {
+    throw new Error("Could not reach the admin follow-up service.");
+  }
+
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {
+    // Non-JSON response.
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      response.status === 401 || response.status === 403
+        ? "You do not have permission to update enquiries."
+        : isRecord(payload) && typeof payload.message === "string"
+          ? payload.message
+          : "The enquiry follow-up could not be saved.",
+    );
+  }
+
   const session: unknown = JSON.parse(sessionStorage.getItem(adminSessionKey)!);
   if (
     typeof session !== "object" ||
@@ -720,8 +765,12 @@ export async function getAdminEnquiriesFromApi(): Promise<AdminEnquiry[]> {
         id,
         name: clientText(entry, ["name", "contactName"]) || "Not provided",
         business:
-          clientText(entry, ["business", "businessName", "companyName"]) ||
-          "Not provided",
+          clientText(entry, [
+            "business",
+            "businessOrName",
+            "businessName",
+            "companyName",
+          ]) || "Not provided",
         email: clientText(entry, ["email", "businessEmail"]) || "Not provided",
         phone: clientText(entry, ["phone", "phoneNumber", "mobile"]),
         goal:
