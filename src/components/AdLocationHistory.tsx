@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Advertisement } from "../lib/advertisements";
 import { getCabDrivers } from "../lib/admin";
 import { AdRouteMap } from "./AdRouteMap";
+import { PaginatedList } from "./PaginatedList";
 
 type PlaybackRecord = {
   date: string;
@@ -79,8 +80,10 @@ function getPlaybackRecords(
 
 export function AdLocationHistory({
   advertisement,
+  paginate = false,
 }: {
   advertisement: Advertisement;
+  paginate?: boolean;
 }) {
   const todayKey = toDateKey(new Date());
   const [selectedDate, setSelectedDate] = useState(todayKey);
@@ -192,35 +195,44 @@ export function AdLocationHistory({
               ))}
             </div>
           </div>
-          <div className="dashboard-table-scroll">
-            <table className="dashboard-table admin-location-table">
-              <thead>
-                <tr>
-                  <th scope="col">Car</th>
-                  <th scope="col">Location</th>
-                  <th scope="col">Screen</th>
-                  <th scope="col">Play time</th>
-                </tr>
-              </thead>
-              <tbody id="ad-location-records">
-                {records.map((record) => (
-                  <tr
-                    key={record.vehicle}
-                    className={
-                      record.vehicle === selectedRecord?.vehicle
-                        ? "admin-location-row-selected"
-                        : undefined
-                    }
-                  >
-                    <td>{record.vehicle}</td>
-                    <td>{record.location}</td>
-                    <td>In-car display</td>
-                    <td>{record.time}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PaginatedList
+            rows={records}
+            label="Car playback locations"
+            filterKey={`${advertisement.id}:${selectedDate}`}
+            enabled={paginate}
+          >
+            {(pageRecords) => (
+              <div className="dashboard-table-scroll">
+                <table className="dashboard-table admin-location-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Car</th>
+                      <th scope="col">Location</th>
+                      <th scope="col">Screen</th>
+                      <th scope="col">Play time</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ad-location-records">
+                    {pageRecords.map((record) => (
+                      <tr
+                        key={record.vehicle}
+                        className={
+                          record.vehicle === selectedRecord?.vehicle
+                            ? "admin-location-row-selected"
+                            : undefined
+                        }
+                      >
+                        <td>{record.vehicle}</td>
+                        <td>{record.location}</td>
+                        <td>In-car display</td>
+                        <td>{record.time}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </PaginatedList>
         </>
       ) : (
         <p className="admin-location-empty">

@@ -5,10 +5,11 @@ import {
   getSavedProfile,
 } from "./portal";
 import type { ChartRange } from "./chartPeriods";
+import { parseClientCampaignList } from "./campaignModel";
 
 const adminSessionKey = "adrover-demo-admin-session";
 const enquiryUpdatesKey = "adrover-enquiry-updates";
-const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? "")
+const baseUrl = (import.meta.env?.VITE_API_BASE_URL ?? "")
   .trim()
   .replace(/\/$/, "");
 
@@ -156,10 +157,7 @@ function adminRequestHeaders(includeAuth = true): Record<string, string> {
   return headers;
 }
 
-async function adminGet(
-  path: string,
-  includeAuth = true,
-): Promise<Response> {
+async function adminGet(path: string, includeAuth = true): Promise<Response> {
   return fetch(`${baseUrl}${path}`, {
     method: "GET",
     headers: adminRequestHeaders(includeAuth),
@@ -185,42 +183,72 @@ async function adminList(
   path: string,
   key: string,
 ): Promise<Record<string, unknown>[]> {
-  let response: Response;
-  try {
-    response = await adminGet(path);
-  } catch {
-    throw new Error("Could not reach the admin service.");
-  }
+  const items: Record<string, unknown>[] = [];
+  for (let page = 1; ; page++) {
+    let response: Response;
+    try {
+      response = await adminGet(`${path}?pageNumber=${page}&pageSize=100`);
+    } catch {
+      throw new Error("Could not reach the admin service.");
+    }
 
-  let payload: unknown = null;
-  try {
-    payload = await response.json();
-  } catch {
-    // Non-JSON response.
-  }
+    let payload: unknown = null;
+    try {
+      payload = await response.json();
+    } catch {
+      // Non-JSON response.
+    }
 
-  if (!response.ok) {
-    throw new Error(
-      response.status === 401 || response.status === 403
-        ? "Your admin session has expired. Sign in again."
-        : "The admin data could not be loaded.",
-    );
-  }
+    if (!response.ok) {
+      throw new Error(
+        response.status === 401 || response.status === 403
+          ? "Your admin session has expired. Sign in again."
+          : "The admin data could not be loaded.",
+      );
+    }
 
-  const body =
-    isRecord(payload) && payload.success === true && "data" in payload
-      ? payload.data
-      : payload;
-  const list =
-    isRecord(body) && Array.isArray(field(body, [key]))
-      ? (field(body, [key]) as unknown[])
-      : Array.isArray(body)
-        ? body
-        : [];
-  if (!list.every(isRecord)) {
-    throw new Error("The admin data response was invalid.");
+    const body =
+      isRecord(payload) && "data" in payload ? payload.data : payload;
+    const listValue = Array.isArray(body)
+      ? body
+      : isRecord(body)
+        ? (Object.entries(body).find(
+            ([name]) => name.toLowerCase() === key.toLowerCase(),
+          )?.[1] ??
+          Object.entries(body).find(
+            ([name]) => name.toLowerCase() === "items",
+          )?.[1])
+        : undefined;
+    if (!Array.isArray(listValue) || !listValue.every(isRecord)) {
+      throw new Error(`The admin ${key} response was invalid.`);
+    }
+    items.push(...listValue);
+    const total = isRecord(body)
+      ? Object.entries(body).find(
+          ([name]) => name.toLowerCase() === "total",
+        )?.[1]
+      : undefined;
+    if (total === undefined) return items;
+    if (
+      typeof total !== "number" ||
+      !Number.isSafeInteger(total) ||
+      total < 0
+    ) {
+      throw new Error(`The admin ${key} total was invalid.`);
+    }
+    const pageNumber = isRecord(body)
+      ? Object.entries(body).find(
+          ([name]) => name.toLowerCase() === "pagenumber",
+        )?.[1]
+      : undefined;
+    if (pageNumber !== undefined && pageNumber !== page) {
+      throw new Error(`The admin ${key} page was invalid.`);
+    }
+    if (items.length >= total) return items;
+    if (!listValue.length) {
+      throw new Error(`Some admin ${key} records could not be loaded.`);
+    }
   }
-  return list;
 }
 
 export async function loginAdmin(
@@ -512,34 +540,36 @@ export async function saveEnquiryUpdate(
     throw new Error("Enter a note containing text, not just spaces.");
   if (!id.trim()) throw new Error("Choose a valid enquiry before saving.");
 
-  let response: Response;
-  try {
-    response = await adminPut(
-      `/api/admin/enquiries/${encodeURIComponent(id)}/follow-up`,
-      {
-        replyStatus: status,
-        internalNote: note.trim(),
-      },
-    );
-  } catch {
-    throw new Error("Could not reach the admin follow-up service.");
-  }
+  if (baseUrl) {
+    let response: Response;
+    try {
+      response = await adminPut(
+        `/api/admin/enquiries/${encodeURIComponent(id)}/follow-up`,
+        {
+          replyStatus: status,
+          internalNote: note.trim(),
+        },
+      );
+    } catch {
+      throw new Error("Could not reach the admin follow-up service.");
+    }
 
-  let payload: unknown = null;
-  try {
-    payload = await response.json();
-  } catch {
-    // Non-JSON response.
-  }
+    let payload: unknown = null;
+    try {
+      payload = await response.json();
+    } catch {
+      // Non-JSON response.
+    }
 
-  if (!response.ok) {
-    throw new Error(
-      response.status === 401 || response.status === 403
-        ? "You do not have permission to update enquiries."
-        : isRecord(payload) && typeof payload.message === "string"
-          ? payload.message
-          : "The enquiry follow-up could not be saved.",
-    );
+    if (!response.ok) {
+      throw new Error(
+        response.status === 401 || response.status === 403
+          ? "You do not have permission to update enquiries."
+          : isRecord(payload) && typeof payload.message === "string"
+            ? payload.message
+            : "The enquiry follow-up could not be saved.",
+      );
+    }
   }
 
   const session: unknown = JSON.parse(sessionStorage.getItem(adminSessionKey)!);
@@ -630,6 +660,7 @@ export function getAdminRedirect(search: string) {
     ![
       "dashboard",
       "clients",
+      "unfinished-registrations",
       "client",
       "enquiries",
       "cabs",
@@ -687,7 +718,9 @@ export function getAdminClients() {
   ];
 }
 
-export type AdminClient = ReturnType<typeof getAdminClients>[number];
+export type AdminClient = ReturnType<typeof getAdminClients>[number] & {
+  reportedAdsCount?: number;
+};
 
 let adminClientsInFlight: Promise<AdminClient[]> | null = null;
 
@@ -713,6 +746,7 @@ function clientFlag(record: Record<string, unknown>, keys: string[]): boolean {
 }
 
 export async function getAdminClientsFromApi(): Promise<AdminClient[]> {
+  if (!baseUrl) return getAdminClients();
   if (adminClientsInFlight) return adminClientsInFlight;
 
   adminClientsInFlight = (async () => {
@@ -726,9 +760,17 @@ export async function getAdminClientsFromApi(): Promise<AdminClient[]> {
         `client-${index + 1}@example.com`;
       const signInEmail =
         clientText(entry, ["signInEmail", "ownerEmail", "loginEmail"]) || email;
-      const clientAds = ads.filter(
-        (ad) => ad.ownerEmail === signInEmail || ad.ownerEmail === email,
+      const embeddedAds = parseClientCampaignList(
+        field(entry, ["campaigns", "ads", "advertisements"]),
       );
+      const clientAds = embeddedAds
+        ? embeddedAds.map((ad) => ({
+            ...ad,
+            ownerEmail: signInEmail,
+          }))
+        : ads.filter(
+            (ad) => ad.ownerEmail === signInEmail || ad.ownerEmail === email,
+          );
       const name =
         clientText(entry, [
           "clientOrBusiness",
@@ -762,12 +804,14 @@ export async function getAdminClientsFromApi(): Promise<AdminClient[]> {
         signInEmail,
         profileSaved: clientFlag(entry, ["profileSaved", "hasProfile"]),
         ads: clientAds,
-        reportedAdsCount: clientCount(entry, [
-          "advertisements",
-          "advertisementCount",
-          "adsCount",
-          "totalAds",
-        ]),
+        reportedAdsCount:
+          embeddedAds?.length ??
+          clientCount(entry, [
+            "advertisementCount",
+            "adsCount",
+            "totalAds",
+            "advertisements",
+          ]),
       };
     });
   })();
@@ -818,6 +862,7 @@ export type AdminEnquiry = ReturnType<typeof getAdminEnquiries>[number] & {
 let adminEnquiriesInFlight: Promise<AdminEnquiry[]> | null = null;
 
 export async function getAdminEnquiriesFromApi(): Promise<AdminEnquiry[]> {
+  if (!baseUrl) return getAdminEnquiries();
   if (adminEnquiriesInFlight) return adminEnquiriesInFlight;
 
   adminEnquiriesInFlight = (async () => {

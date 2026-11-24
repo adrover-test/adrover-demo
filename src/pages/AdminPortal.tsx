@@ -18,10 +18,16 @@ import { ViewAd } from "./ViewAd";
 import { AdminCharts } from "../components/AdminCharts";
 import { EnquiryFollowUp } from "../components/EnquiryFollowUp";
 import { useClientResource } from "../lib/useClientResource";
+import {
+  UnfinishedRegistrations,
+  ClientRegistrationFollowUp,
+} from "../components/RegistrationFollowUps";
+import { PaginatedList } from "../components/PaginatedList";
 
 const sections = [
   ["dashboard", "Overview"],
   ["clients", "Clients"],
+  ["unfinished-registrations", "Unfinished registrations"],
   ["enquiries", "Enquiries"],
   ["cabs", "Cabs & drivers"],
   ["approvals", "Ad approvals"],
@@ -234,28 +240,36 @@ export function AdminPortal() {
   const matches = (...values: string[]) =>
     values.join(" ").toLowerCase().includes(query);
   const enquiries = apiEnquiries ?? [];
+  const enquiryReplyStatus = (entry: (typeof enquiries)[number]) =>
+    entry.update?.status ?? entry.replyStatus ?? "Awaiting reply";
   const enquiryCounts = {
     All: enquiries.length,
     "Awaiting reply": enquiries.filter(
-      (entry) => (entry.update?.status ?? entry.replyStatus) !== "Replied",
+      (entry) => enquiryReplyStatus(entry) === "Awaiting reply",
     ).length,
     Replied: enquiries.filter(
-      (entry) => (entry.update?.status ?? entry.replyStatus) === "Replied",
+      (entry) => enquiryReplyStatus(entry) === "Replied",
     ).length,
   };
   const filteredEnquiries = enquiries
     .filter(
       (entry) =>
         (enquiryFilter === "All" ||
-          (entry.update?.status ?? "Awaiting reply") === enquiryFilter) &&
+          enquiryReplyStatus(entry) === enquiryFilter) &&
         matches(entry.name, entry.business, entry.email, entry.message),
     )
     .sort(
       (left, right) =>
-        Number((left.update?.status ?? "Awaiting reply") === "Replied") -
-        Number((right.update?.status ?? "Awaiting reply") === "Replied"),
+        Number(enquiryReplyStatus(left) === "Replied") -
+        Number(enquiryReplyStatus(right) === "Replied"),
     );
   const clients = apiClients ?? [];
+  const filteredClients = clients.filter((entry) =>
+    matches(entry.name, entry.email, entry.contact),
+  );
+  const filteredCabs = cabs.filter((cab) =>
+    matches(cab.driver, cab.car, cab.phone, cab.email, cab.area, cab.screenId),
+  );
   const ad = data?.ads.find((entry) => entry.id === id);
   const client = clients.find((entry) => entry.id === id);
   const cab = cabs.find((entry) => entry.id === id);
@@ -268,58 +282,69 @@ export function AdminPortal() {
         ? (cab?.driver ?? "Cab driver not found")
         : (sections.find(([key]) => key === section)?.[1] ?? "Page not found");
 
-  function adTable(ads: Advertisement[]) {
+  function adTable(
+    ads: Advertisement[],
+    emptyMessage = "No advertisements match this view.",
+    initialPageSize = 10,
+  ) {
     return (
-      <div className="dashboard-table-scroll">
-        <table className="dashboard-table admin-table">
-          <thead>
-            <tr>
-              <th scope="col">Advertisement</th>
-              <th scope="col">Client / brand</th>
-              <th scope="col">Status</th>
-              <th scope="col">Play target</th>
-              <th scope="col">Total amount</th>
-              <th scope="col">Details</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ads.map((entry) => (
-              <tr key={entry.id}>
-                <th scope="row">
-                  <strong>{entry.name}</strong>
-                  <span>{entry.area}</span>
-                </th>
-                <td>{entry.brand}</td>
-                <td>
-                  <span
-                    className={`campaign-status campaign-status-${entry.status.toLowerCase().replaceAll(" ", "-")}`}
-                  >
-                    {entry.status}
-                  </span>
-                </td>
-                <td>{numberFormat.format(entry.target)}</td>
-                <td>
-                  {entry.approval
-                    ? moneyFormat.format(entry.approval.amount)
-                    : "Not assigned"}
-                </td>
-                <td>
-                  <a
-                    className="button ghost small"
-                    aria-label={`View ad ${entry.name}`}
-                    href={adminLink("ad", entry.id)}
-                  >
-                    View details
-                  </a>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {ads.length === 0 && (
-          <p className="admin-empty">No advertisements match this view.</p>
+      <PaginatedList
+        rows={ads}
+        label="Advertisements"
+        filterKey={`${section}:${id ?? ""}:${query}`}
+        initialPageSize={initialPageSize}
+      >
+        {(pageAds) => (
+          <div className="dashboard-table-scroll">
+            <table className="dashboard-table admin-table">
+              <thead>
+                <tr>
+                  <th scope="col">Advertisement</th>
+                  <th scope="col">Client / brand</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Play target</th>
+                  <th scope="col">Total amount</th>
+                  <th scope="col">Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageAds.map((entry) => (
+                  <tr key={entry.id}>
+                    <th scope="row">
+                      <strong>{entry.name}</strong>
+                      <span>{entry.area}</span>
+                    </th>
+                    <td>{entry.brand}</td>
+                    <td>
+                      <span
+                        className={`campaign-status campaign-status-${entry.status.toLowerCase().replaceAll(" ", "-")}`}
+                      >
+                        {entry.status}
+                      </span>
+                    </td>
+                    <td>{numberFormat.format(entry.target)}</td>
+                    <td>
+                      {entry.approval
+                        ? moneyFormat.format(entry.approval.amount)
+                        : "Not assigned"}
+                    </td>
+                    <td>
+                      <a
+                        className="button ghost small"
+                        aria-label={`View ad ${entry.name}`}
+                        href={adminLink("ad", entry.id)}
+                      >
+                        View details
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {ads.length === 0 && <p className="admin-empty">{emptyMessage}</p>}
+          </div>
         )}
-      </div>
+      </PaginatedList>
     );
   }
 
@@ -506,7 +531,7 @@ export function AdminPortal() {
                       All approvals
                     </a>
                   </div>
-                  {adTable(pending.slice(0, 5))}
+                  {adTable(pending, "No advertisements match this view.", 5)}
                 </section>
                 <section className="dashboard-panel admin-section">
                   <h2>From enquiry to campaign</h2>
@@ -551,57 +576,60 @@ export function AdminPortal() {
                     </button>
                   </p>
                 )}
-                <div className="dashboard-table-scroll">
-                  <table className="dashboard-table admin-table admin-clients-table">
-                    <thead>
-                      <tr>
-                        {[
-                          "Client / business",
-                          "Contact name",
-                          "Email",
-                          "Phone",
-                          "Advertisements",
-                          "Details",
-                        ].map((label) => (
-                          <th scope="col" key={label}>
-                            {label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {clients
-                        .filter((entry) =>
-                          matches(entry.name, entry.email, entry.contact),
-                        )
-                        .map((entry) => (
-                          <tr key={entry.id}>
-                            <th scope="row">
-                              <strong>{entry.name}</strong>
-                              <span>{entry.area}</span>
-                            </th>
-                            <td>{entry.contact}</td>
-                            <td>{entry.email}</td>
-                            <td>{entry.phone}</td>
-                            <td>
-                              {numberFormat.format(
-                                (entry as { reportedAdsCount?: number })
-                                  .reportedAdsCount ?? entry.ads.length,
-                              )}
-                            </td>
-                            <td>
-                              <a
-                                className="button ghost small"
-                                href={adminLink("client", entry.id)}
-                              >
-                                View client
-                              </a>
-                            </td>
+                <PaginatedList
+                  rows={filteredClients}
+                  label="Clients"
+                  filterKey={query}
+                >
+                  {(pageClients) => (
+                    <div className="dashboard-table-scroll">
+                      <table className="dashboard-table admin-table admin-clients-table">
+                        <thead>
+                          <tr>
+                            {[
+                              "Client / business",
+                              "Contact name",
+                              "Email",
+                              "Phone",
+                              "Advertisements",
+                              "Details",
+                            ].map((label) => (
+                              <th scope="col" key={label}>
+                                {label}
+                              </th>
+                            ))}
                           </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
+                        </thead>
+                        <tbody>
+                          {pageClients.map((entry) => (
+                            <tr key={entry.id}>
+                              <th scope="row">
+                                <strong>{entry.name}</strong>
+                                <span>{entry.area}</span>
+                              </th>
+                              <td>{entry.contact}</td>
+                              <td>{entry.email}</td>
+                              <td>{entry.phone}</td>
+                              <td>
+                                {numberFormat.format(
+                                  entry.reportedAdsCount ?? entry.ads.length,
+                                )}
+                              </td>
+                              <td>
+                                <a
+                                  className="button ghost small"
+                                  href={adminLink("client", entry.id)}
+                                >
+                                  View client
+                                </a>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </PaginatedList>
                 {!clientsLoading &&
                   !clientsError &&
                   !clients.some((entry) =>
@@ -650,7 +678,19 @@ export function AdminPortal() {
                   </section>
                   <section className="dashboard-panel admin-section">
                     <h2>Client advertisements</h2>
-                    {adTable(client.ads)}
+                    {adTable(
+                      client.ads,
+                      (client.reportedAdsCount ?? client.ads.length) > 0
+                        ? `The API reports ${numberFormat.format(client.reportedAdsCount ?? 0)} advertisements, but does not include their details here.`
+                        : "No advertisements are associated with this client.",
+                    )}
+                  </section>
+                  <section className="dashboard-panel admin-section">
+                    <ClientRegistrationFollowUp
+                      clientId={client.id}
+                      email={client.email}
+                      phone={client.phone}
+                    />
                   </section>
                 </>
               ) : clientsLoading ? (
@@ -664,6 +704,9 @@ export function AdminPortal() {
                   Select a client from the clients list.
                 </p>
               ))}
+            {section === "unfinished-registrations" && (
+              <UnfinishedRegistrations />
+            )}
             {section === "enquiries" && (
               <section
                 className="dashboard-panel admin-enquiries"
@@ -733,71 +776,79 @@ export function AdminPortal() {
                   Internal statuses and notes are shared only within this
                   browser. Marking Replied does not send an email.
                 </p>
-                <div className="dashboard-table-scroll">
-                  <table className="dashboard-table admin-table">
-                    <thead>
-                      <tr>
-                        {[
-                          "Business / name",
-                          "Received",
-                          "Email",
-                          "Phone",
-                          "Objective",
-                          "Requirements",
-                          "Reply status",
-                          "Internal notes",
-                        ].map((label) => (
-                          <th scope="col" key={label}>
-                            {label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredEnquiries.map((entry) => (
-                        <tr key={entry.id}>
-                          <th scope="row">
-                            <strong>{entry.business}</strong>
-                            <span>{entry.name}</span>
-                          </th>
-                          <td>
-                            {new Date(entry.createdAt).toLocaleDateString(
-                              "en-IN",
-                            )}
-                          </td>
-                          <td>{entry.email}</td>
-                          <td>{entry.phone || "Not provided"}</td>
-                          <td>{entry.goal}</td>
-                          <td className="admin-enquiry-message">
-                            {entry.message ||
-                              "No additional requirements provided."}
-                          </td>
-                          <td>
-                            <span
-                              className={`enquiry-reply-status ${(entry.update?.status ?? entry.replyStatus) === "Replied" ? "enquiry-replied" : "enquiry-awaiting"}`}
-                            >
-                              {entry.update?.status ??
-                                entry.replyStatus ??
-                                "Awaiting reply"}
-                            </span>
-                          </td>
-                          <td>
-                            <EnquiryFollowUp
-                              id={entry.id}
-                              business={entry.business}
-                              update={entry.update}
-                              replyStatus={entry.replyStatus}
-                              onSaved={() => {
-                                setResult(loadData());
-                                refreshEnquiries();
-                              }}
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <PaginatedList
+                  rows={filteredEnquiries}
+                  label="Enquiries"
+                  filterKey={`${query}:${enquiryFilter}`}
+                >
+                  {(pageEnquiries) => (
+                    <div className="dashboard-table-scroll">
+                      <table className="dashboard-table admin-table">
+                        <thead>
+                          <tr>
+                            {[
+                              "Business / name",
+                              "Received",
+                              "Email",
+                              "Phone",
+                              "Objective",
+                              "Requirements",
+                              "Reply status",
+                              "Internal notes",
+                            ].map((label) => (
+                              <th scope="col" key={label}>
+                                {label}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pageEnquiries.map((entry) => (
+                            <tr key={entry.id}>
+                              <th scope="row">
+                                <strong>{entry.business}</strong>
+                                <span>{entry.name}</span>
+                              </th>
+                              <td>
+                                {new Date(entry.createdAt).toLocaleDateString(
+                                  "en-IN",
+                                )}
+                              </td>
+                              <td>{entry.email}</td>
+                              <td>{entry.phone || "Not provided"}</td>
+                              <td>{entry.goal}</td>
+                              <td className="admin-enquiry-message">
+                                {entry.message ||
+                                  "No additional requirements provided."}
+                              </td>
+                              <td>
+                                <span
+                                  className={`enquiry-reply-status ${(entry.update?.status ?? entry.replyStatus) === "Replied" ? "enquiry-replied" : "enquiry-awaiting"}`}
+                                >
+                                  {entry.update?.status ??
+                                    entry.replyStatus ??
+                                    "Awaiting reply"}
+                                </span>
+                              </td>
+                              <td>
+                                <EnquiryFollowUp
+                                  id={entry.id}
+                                  business={entry.business}
+                                  update={entry.update}
+                                  replyStatus={entry.replyStatus}
+                                  onSaved={() => {
+                                    setResult(loadData());
+                                    refreshEnquiries();
+                                  }}
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </PaginatedList>
                 {!enquiriesLoading &&
                   !enquiriesError &&
                   filteredEnquiries.length === 0 && (
@@ -834,28 +885,66 @@ export function AdminPortal() {
                     {cabsError}
                   </p>
                 )}
-                <div className="dashboard-table-scroll">
-                  <table className="dashboard-table admin-table">
-                    <thead>
-                      <tr>
-                        {[
-                          "Driver / cab ID",
-                          "Car number / model",
-                          "Contact details",
-                          "Service area",
-                          "Screen ID",
-                          "Availability",
-                          "Details",
-                        ].map((label) => (
-                          <th key={label} scope="col">
-                            {label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cabs
-                        .filter((cab) =>
+                <PaginatedList
+                  rows={filteredCabs}
+                  label="Cabs and drivers"
+                  filterKey={query}
+                >
+                  {(pageCabs) => (
+                    <div className="dashboard-table-scroll">
+                      <table className="dashboard-table admin-table">
+                        <thead>
+                          <tr>
+                            {[
+                              "Driver / cab ID",
+                              "Car number / model",
+                              "Contact details",
+                              "Service area",
+                              "Screen ID",
+                              "Availability",
+                              "Details",
+                            ].map((label) => (
+                              <th key={label} scope="col">
+                                {label}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pageCabs.map((cab) => (
+                            <tr key={cab.id}>
+                              <th scope="row">
+                                <strong>{cab.driver}</strong>
+                                <span>{cab.id}</span>
+                              </th>
+                              <td>
+                                <strong>{cab.car}</strong>
+                                <br />
+                                {cab.model}
+                              </td>
+                              <td>
+                                {cab.phone}
+                                <br />
+                                {cab.email}
+                              </td>
+                              <td>{cab.area}</td>
+                              <td>{cab.screenId || "Not assigned"}</td>
+                              <td>{cab.status}</td>
+                              <td>
+                                <a
+                                  className="button ghost small"
+                                  href={adminLink("cab", cab.id)}
+                                  aria-label={`View details for ${cab.driver}`}
+                                >
+                                  View details
+                                </a>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {liveCabs &&
+                        !cabs.some((cab) =>
                           matches(
                             cab.driver,
                             cab.car,
@@ -864,53 +953,14 @@ export function AdminPortal() {
                             cab.area,
                             cab.screenId,
                           ),
-                        )
-                        .map((cab) => (
-                          <tr key={cab.id}>
-                            <th scope="row">
-                              <strong>{cab.driver}</strong>
-                              <span>{cab.id}</span>
-                            </th>
-                            <td>
-                              <strong>{cab.car}</strong>
-                              <br />
-                              {cab.model}
-                            </td>
-                            <td>
-                              {cab.phone}
-                              <br />
-                              {cab.email}
-                            </td>
-                            <td>{cab.area}</td>
-                            <td>{cab.screenId || "Not assigned"}</td>
-                            <td>{cab.status}</td>
-                            <td>
-                              <a
-                                className="button ghost small"
-                                href={adminLink("cab", cab.id)}
-                                aria-label={`View details for ${cab.driver}`}
-                              >
-                                View details
-                              </a>
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                  {liveCabs &&
-                    !cabs.some((cab) =>
-                      matches(
-                        cab.driver,
-                        cab.car,
-                        cab.phone,
-                        cab.email,
-                        cab.area,
-                        cab.screenId,
-                      ),
-                    ) && (
-                      <p className="admin-empty">No cabs match your search.</p>
-                    )}
-                </div>
+                        ) && (
+                          <p className="admin-empty">
+                            No cabs match your search.
+                          </p>
+                        )}
+                    </div>
+                  )}
+                </PaginatedList>
               </section>
             )}
             {section === "cab" && (

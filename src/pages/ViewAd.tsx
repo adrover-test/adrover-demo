@@ -297,7 +297,7 @@ export function ViewAd({
             </p>
           </aside>
         </section>
-        <AdLocationHistory advertisement={ad} />
+        <AdLocationHistory advertisement={ad} paginate={admin} />
       </div>
     </section>
   );

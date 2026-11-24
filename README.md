@@ -76,7 +76,34 @@ existing SuperAdmin account. The separate admin session is stored in
 `sessionStorage`. Without an API URL the admin preview uses a browser-local
 session and cannot manage the driver directory.
 
+The **Unfinished registrations** tab (`admin.html?section=unfinished-registrations`)
+lists clients with saved ad-registration drafts that have not completed payment,
+not every unpaid campaign. Search by client contact or campaign and open
+**Messages & follow-up history** to save an internal note, schedule the next
+follow-up, or send email/SMS to the client's saved contact. History is shared
+between administrators and also appears on the client detail page after payment.
+This feature requires the updated backend and a SuperAdmin session; there is
+no browser-local fallback or automatic outreach. History uses existing audit
+storage, so no additional database migration is needed.
+
+Email requires the backend's existing `Smtp` settings. SMS additionally requires
+`Msg91:AuthKey`, `Msg91:FollowUpTemplateId` and
+`Msg91:FollowUpMessageVariable`, matching an approved MSG91/DLT template, and a
+valid Indian client phone number. Configure secrets on the backend, not in Vite.
+Simulation mode does not send client messages. **Accepted** means the provider
+accepted the request, not confirmed delivery. For **Pending** or **Unknown**,
+check history and the provider before resending; retrying an unchanged request
+in the same form reuses its request ID to prevent duplicate sends.
+
 The admin overview shows client, enquiry, cab and pending-ad counts.
+All admin tables have independent pagination with First/Previous/Next/Last,
+a row-range count and a rows-per-page selector (10, 25 or 50). The overview's
+review table starts with five rows. Search and reply/date filters apply to all
+records before pagination and reset the page; shrinking results clamp to a valid
+page. Client and enquiry lists load all backend pages, so later records remain
+searchable. Unfinished-registration clients and their draft tables paginate
+independently. Admin playback tables paginate without changing map/chart totals;
+client and driver pages are unchanged.
 Under Cabs & drivers, create and edit database-backed drivers, including their
 screen ID. Generate and share the password before saving: only a one-way hash
 is stored and it cannot be viewed again. Generated passwords use short parts
@@ -419,8 +446,8 @@ Use `npm run format` to format source and configuration.
 - The project uses only bundled local assets and system fonts. Review your rights to all
   supplied content before making your GitHub repository public. No license grant is
   invented for your business materials.
-"# adrover-demo" 
-"# adrover-demo" 
+"# adrover-demo"
+"# adrover-demo"
 
 ## Razorpay payments
 

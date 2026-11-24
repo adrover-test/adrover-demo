@@ -13,13 +13,16 @@ import {
 import {
   endAdminSession,
   getAdminClients,
+  getAdminClientsFromApi,
   getAdminEnquiries,
+  getAdminEnquiriesFromApi,
   getAdminRedirect,
   isAdminSessionActive,
   startAdminSession,
   createCabDriver,
   getCabDrivers,
 } from "../src/lib/admin";
+import { parseClientCampaignList } from "../src/lib/campaignModel";
 
 class MemoryStorage implements Storage {
   private values = new Map<string, string>();
@@ -230,4 +233,43 @@ test("enquiries persist and malformed storage is rejected", () => {
   expect(() => getDemoClients()).toThrow("could not be read");
   localStorage.setItem("adrover-demo-approvals", "[{}]");
   expect(() => getAllAdvertisements()).toThrow("could not be read");
+});
+
+test("admin client and enquiry lists use local preview data without an API URL", async () => {
+  expect(await getAdminClientsFromApi()).toEqual(getAdminClients());
+  expect(await getAdminEnquiriesFromApi()).toEqual(getAdminEnquiries());
+});
+
+test("embedded backend campaigns map to admin advertisement rows", () => {
+  const [campaign] = parseClientCampaignList({
+    items: [
+      {
+        id: "campaign-1",
+        name: "Spring offer",
+        brand: "Example brand",
+        description: "Promote the spring offer",
+        targetArea: "Hyderabad",
+        startDate: "2026-11-01T00:00:00Z",
+        endDate: "2026-11-30T00:00:00Z",
+        submittedAt: "2026-10-25T00:00:00Z",
+        targetPlays: 10000,
+        actualPlays: 2500,
+        assignedCabs: 10,
+        approvalAmount: 3000,
+        paidAmount: 1500,
+        status: "Active",
+        rejectionReason: null,
+        videoUrl: null,
+        imageUrl: null,
+      },
+    ],
+  }) ?? [];
+  expect(campaign).toMatchObject({
+    id: "campaign-1",
+    name: "Spring offer",
+    brand: "Example brand",
+    status: "Active",
+    target: 10000,
+    plays: 2500,
+  });
 });
