@@ -4,12 +4,11 @@ import {
   getDemoEnquiries,
   getSavedProfile,
 } from "./portal";
-import { getClientToken } from "./clientAuth";
 import type { ChartRange } from "./chartPeriods";
 
 const adminSessionKey = "adrover-demo-admin-session";
 const enquiryUpdatesKey = "adrover-enquiry-updates";
-const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? "https://localhost:7100")
+const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? "")
   .trim()
   .replace(/\/$/, "");
 
@@ -40,7 +39,10 @@ export type OperationsOverviewPoint = {
 export type AdminOperationsOverview = {
   adPlays: OperationsOverviewPoint[];
   campaignRevenue: OperationsOverviewPoint[];
-  statusCounts: Record<"Active" | "Pending approval" | "Approved" | "Completed", number>;
+  statusCounts: Record<
+    "Active" | "Pending approval" | "Approved" | "Completed",
+    number
+  >;
   totalAds: number;
   periodPlays: number;
 };
@@ -118,7 +120,10 @@ function statusCountFrom(
       Math.floor(numericField(nested, [primaryKey, ...fallbackKeys])),
     );
   }
-  const statusList = field(source, ["advertisementsByStatus", "statusBreakdown"]);
+  const statusList = field(source, [
+    "advertisementsByStatus",
+    "statusBreakdown",
+  ]);
   if (Array.isArray(statusList)) {
     const target = [primaryKey, ...fallbackKeys].map((value) =>
       value.toLowerCase().replaceAll(" ", ""),
@@ -130,26 +135,102 @@ function statusCountFrom(
         .replaceAll(" ", "");
       return target.includes(status);
     });
-    if (isRecord(matched)) return Math.max(0, Math.floor(numericField(matched, ["count", "value", "total"])));
+    if (isRecord(matched))
+      return Math.max(
+        0,
+        Math.floor(numericField(matched, ["count", "value", "total"])),
+      );
   }
-  return Math.max(0, Math.floor(numericField(source, [primaryKey, ...fallbackKeys])));
+  return Math.max(
+    0,
+    Math.floor(numericField(source, [primaryKey, ...fallbackKeys])),
+  );
 }
 
-function adminRequestHeaders(includeAuth = true): Record<string, string> {
-  const token = getClientToken();
+function adminRequestHeaders(): Record<string, string> {
+  const token = getAdminToken();
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (includeAuth && token) {
+  if (token) {
     headers.Authorization = `Bearer ${token}`;
-    headers["auth-token"] = token;
   }
   return headers;
 }
 
-async function adminGet(path: string, includeAuth = true): Promise<Response> {
+async function adminGet(path: string): Promise<Response> {
   return fetch(`${baseUrl}${path}`, {
     method: "GET",
-    headers: adminRequestHeaders(includeAuth),
+    headers: adminRequestHeaders(),
   });
+}
+
+async function adminList(path: string, label: string): Promise<unknown[]> {
+  const entries: unknown[] = [];
+  for (let page = 1; ; page++) {
+    let response: Response;
+    try {
+      response = await adminGet(`${path}?pageNumber=${page}&pageSize=100`);
+    } catch {
+      throw new Error(`Could not reach the admin ${label} service.`);
+    }
+    if (!response.ok)
+      throw new Error(
+        response.status === 401 || response.status === 403
+          ? `You do not have permission to view ${label}.`
+          : `The ${label} list could not be loaded.`,
+      );
+    const payload: unknown = await response.json();
+    const body =
+      isRecord(payload) && payload.success === true && "data" in payload
+        ? payload.data
+        : payload;
+    if (Array.isArray(body)) return body;
+    if (
+      !isRecord(body) ||
+      !Array.isArray(body.items) ||
+      typeof body.total !== "number" ||
+      !Number.isSafeInteger(body.total) ||
+      body.total < 0
+    )
+      throw new Error(`The ${label} list response was invalid.`);
+    entries.push(...body.items);
+    if (entries.length >= body.total) return entries;
+    if (body.items.length === 0)
+      throw new Error(`The ${label} list could not be loaded completely.`);
+  }
+}
+
+export async function loginAdmin(
+  email: string,
+  password: string,
+): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/api/v1/auth/admin-login`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, password }),
+    });
+  } catch {
+    throw new Error("Could not reach the admin sign-in service.");
+  }
+  if (!response.ok)
+    throw new Error(
+      response.status === 401
+        ? "Invalid email or password."
+        : "Admin sign-in failed. Please try again.",
+    );
+  const payload: unknown = await response.json();
+  if (
+    !isRecord(payload) ||
+    !isRecord(payload.data) ||
+    typeof payload.data.accessToken !== "string" ||
+    !payload.data.accessToken
+  )
+    throw new Error("The admin sign-in response was invalid.");
+  return payload.data.accessToken;
 }
 
 let dashboardSummaryInFlight: Promise<AdminDashboardSummary> | null = null;
@@ -168,81 +249,81 @@ export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary>
       throw new Error("Could not reach the admin dashboard service.");
     }
 
-  let payload: unknown = null;
-  try {
-    payload = await response.json();
-  } catch {
-    // Non-JSON response.
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      response.status === 401 || response.status === 403
-        ? "You do not have permission to view the admin dashboard summary."
-        : "The admin dashboard summary could not be loaded.",
-    );
-  }
-
-  const body =
-    isRecord(payload) && payload.success === true && "data" in payload
-      ? payload.data
-      : payload;
-  if (!isRecord(body)) {
-    throw new Error("The admin dashboard summary response was invalid.");
-  }
-
-      return {
-        clientsPresent: summaryCount(
-          body,
-          ["clientsPresent", "totalClients", "clients", "clientCount"],
-          "client count",
-        ),
-        enquiries: summaryCount(
-          body,
-          ["enquiries", "totalEnquiries", "enquiryCount"],
-          "enquiry count",
-        ),
-        cabsInDirectory: summaryCount(
-          body,
-          ["cabsInDirectory", "totalCabs", "cabs", "cabCount", "driversCount"],
-          "cab count",
-        ),
-        adsAwaitingApproval: summaryCount(
-          body,
-          [
-            "adsAwaitingApproval",
-            "pendingApprovals",
-            "pendingAdvertisements",
-            "adsPendingApproval",
-          ],
-          "pending approval count",
-        ),
-        totalAds: summaryCount(
-          body,
-          ["totalAds", "advertisements", "advertisementCount"],
-          "advertisement count",
-        ),
-        totalAdPlays: summaryCount(
-          body,
-          ["totalAdPlays", "adPlays", "totalPlays", "plays"],
-          "ad play count",
-        ),
-        totalRevenueTillDate: summaryCount(
-          body,
-          ["totalRevenueTillDate", "totalRevenue", "collectedRevenue", "revenue"],
-          "revenue",
-        ),
-      };
-    })();
-
+    let payload: unknown = null;
     try {
-      return await dashboardSummaryInFlight;
-    } finally {
-      dashboardSummaryInFlight = null;
+      payload = await response.json();
+    } catch {
+      // Non-JSON response.
     }
-  }
 
-  export async function getAdminOperationsOverview(
+    if (!response.ok) {
+      throw new Error(
+        response.status === 401 || response.status === 403
+          ? "You do not have permission to view the admin dashboard summary."
+          : "The admin dashboard summary could not be loaded.",
+      );
+    }
+
+    const body =
+      isRecord(payload) && payload.success === true && "data" in payload
+        ? payload.data
+        : payload;
+    if (!isRecord(body)) {
+      throw new Error("The admin dashboard summary response was invalid.");
+    }
+
+    return {
+      clientsPresent: summaryCount(
+        body,
+        ["clientsPresent", "totalClients", "clients", "clientCount"],
+        "client count",
+      ),
+      enquiries: summaryCount(
+        body,
+        ["enquiries", "totalEnquiries", "enquiryCount"],
+        "enquiry count",
+      ),
+      cabsInDirectory: summaryCount(
+        body,
+        ["cabsInDirectory", "totalCabs", "cabs", "cabCount", "driversCount"],
+        "cab count",
+      ),
+      adsAwaitingApproval: summaryCount(
+        body,
+        [
+          "adsAwaitingApproval",
+          "pendingApprovals",
+          "pendingAdvertisements",
+          "adsPendingApproval",
+        ],
+        "pending approval count",
+      ),
+      totalAds: summaryCount(
+        body,
+        ["totalAds", "advertisements", "advertisementCount"],
+        "advertisement count",
+      ),
+      totalAdPlays: summaryCount(
+        body,
+        ["totalAdPlays", "adPlays", "totalPlays", "plays"],
+        "ad play count",
+      ),
+      totalRevenueTillDate: summaryCount(
+        body,
+        ["totalRevenueTillDate", "totalRevenue", "collectedRevenue", "revenue"],
+        "revenue",
+      ),
+    };
+  })();
+
+  try {
+    return await dashboardSummaryInFlight;
+  } finally {
+    dashboardSummaryInFlight = null;
+  }
+}
+
+export async function getAdminOperationsOverview(
   range: ChartRange,
 ): Promise<AdminOperationsOverview> {
   const cached = operationsOverviewInFlight[range];
@@ -258,82 +339,86 @@ export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary>
       throw new Error("Could not reach the admin operations overview service.");
     }
 
-  let payload: unknown = null;
-  try {
-    payload = await response.json();
-  } catch {
-    // Non-JSON response.
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      response.status === 401 || response.status === 403
-        ? "You do not have permission to view operations overview data."
-        : "The operations overview could not be loaded.",
-    );
-  }
-
-  const body =
-    isRecord(payload) && payload.success === true && "data" in payload
-      ? payload.data
-      : payload;
-  if (!isRecord(body)) {
-    throw new Error("The operations overview response was invalid.");
-  }
-
-      const adPlays = parseOverviewPoints(
-        field(body, ["monthlyAdPlays", "adPlays", "plays", "playsByPeriod"]),
-        ["totalPlays", "value", "plays", "count", "total"],
-      );
-      const campaignRevenue = parseOverviewPoints(
-        field(body, [
-          "monthlyCampaignRevenue",
-          "campaignRevenue",
-          "revenue",
-          "revenueByPeriod",
-        ]),
-        ["netRevenue", "value", "amount", "revenue", "total"],
-      );
-      const statusCounts = {
-        Active: statusCountFrom(body, "Active", ["active"]),
-        "Pending approval": statusCountFrom(body, "Pending approval", [
-          "pendingApproval",
-          "pendingApprovals",
-          "PendingApproval",
-        ]),
-        Approved: statusCountFrom(body, "Approved", ["approved"]),
-        Completed: statusCountFrom(body, "Completed", ["completed"]),
-      } as const;
-      return {
-        adPlays,
-        campaignRevenue,
-        statusCounts,
-        totalAds: Math.max(
-          0,
-          Math.floor(
-            numericField(body, ["totalAds", "advertisements", "advertisementCount"]),
-          ),
-        ),
-        periodPlays: Math.max(
-          0,
-          Math.floor(
-            numericField(body, [
-              "totalAdPlaysInPeriod",
-              "periodPlays",
-              "totalAdPlays",
-              "totalPlays",
-            ]),
-          ),
-        ),
-      };
-    })();
-
+    let payload: unknown = null;
     try {
-      return await operationsOverviewInFlight[range]!;
-    } finally {
-      delete operationsOverviewInFlight[range];
+      payload = await response.json();
+    } catch {
+      // Non-JSON response.
     }
+
+    if (!response.ok) {
+      throw new Error(
+        response.status === 401 || response.status === 403
+          ? "You do not have permission to view operations overview data."
+          : "The operations overview could not be loaded.",
+      );
+    }
+
+    const body =
+      isRecord(payload) && payload.success === true && "data" in payload
+        ? payload.data
+        : payload;
+    if (!isRecord(body)) {
+      throw new Error("The operations overview response was invalid.");
+    }
+
+    const adPlays = parseOverviewPoints(
+      field(body, ["monthlyAdPlays", "adPlays", "plays", "playsByPeriod"]),
+      ["totalPlays", "value", "plays", "count", "total"],
+    );
+    const campaignRevenue = parseOverviewPoints(
+      field(body, [
+        "monthlyCampaignRevenue",
+        "campaignRevenue",
+        "revenue",
+        "revenueByPeriod",
+      ]),
+      ["netRevenue", "value", "amount", "revenue", "total"],
+    );
+    const statusCounts = {
+      Active: statusCountFrom(body, "Active", ["active"]),
+      "Pending approval": statusCountFrom(body, "Pending approval", [
+        "pendingApproval",
+        "pendingApprovals",
+        "PendingApproval",
+      ]),
+      Approved: statusCountFrom(body, "Approved", ["approved"]),
+      Completed: statusCountFrom(body, "Completed", ["completed"]),
+    } as const;
+    return {
+      adPlays,
+      campaignRevenue,
+      statusCounts,
+      totalAds: Math.max(
+        0,
+        Math.floor(
+          numericField(body, [
+            "totalAds",
+            "advertisements",
+            "advertisementCount",
+          ]),
+        ),
+      ),
+      periodPlays: Math.max(
+        0,
+        Math.floor(
+          numericField(body, [
+            "totalAdPlaysInPeriod",
+            "periodPlays",
+            "totalAdPlays",
+            "totalPlays",
+          ]),
+        ),
+      ),
+    };
+  })();
+
+  try {
+    return await operationsOverviewInFlight[range]!;
+  } finally {
+    delete operationsOverviewInFlight[range];
   }
+}
 
 function getEnquiryUpdates(): EnquiryUpdate[] {
   const serialized = localStorage.getItem(enquiryUpdatesKey);
@@ -374,6 +459,7 @@ export function saveEnquiryUpdate(
   id: string,
   status: EnquiryUpdate["status"],
   note: string,
+  knownEnquiryIds: readonly string[] = [],
 ) {
   if (!isAdminSessionActive()) throw new Error("Sign in to update an enquiry.");
   if (status !== "Awaiting reply" && status !== "Replied")
@@ -382,7 +468,10 @@ export function saveEnquiryUpdate(
     throw new Error("Internal notes must be 2,000 characters or fewer.");
   if (note.length > 0 && !note.trim())
     throw new Error("Enter a note containing text, not just spaces.");
-  if (!getAdminEnquiries().some((enquiry) => enquiry.id === id))
+  if (
+    !knownEnquiryIds.includes(id) &&
+    !getAdminEnquiries().some((enquiry) => enquiry.id === id)
+  )
     throw new Error("This enquiry no longer exists. Reload the list.");
   const session: unknown = JSON.parse(sessionStorage.getItem(adminSessionKey)!);
   if (
@@ -414,11 +503,27 @@ export function saveEnquiryUpdate(
   );
 }
 
-export function startAdminSession(email: string) {
+export function startAdminSession(email: string, accessToken?: string) {
   sessionStorage.setItem(
     adminSessionKey,
-    JSON.stringify({ email: email.trim().toLowerCase() }),
+    JSON.stringify({
+      email: email.trim().toLowerCase(),
+      ...(accessToken ? { accessToken } : {}),
+    }),
   );
+}
+
+/** Returns the backend access token for the admin session, if one was issued. */
+export function getAdminToken(): string | null {
+  const serialized = sessionStorage.getItem(adminSessionKey);
+  if (!serialized) return null;
+  const value: unknown = JSON.parse(serialized);
+  return typeof value === "object" &&
+    value !== null &&
+    "accessToken" in value &&
+    typeof value.accessToken === "string"
+    ? value.accessToken
+    : null;
 }
 
 export function endAdminSession() {
@@ -542,39 +647,7 @@ export async function getAdminClientsFromApi(): Promise<AdminClient[]> {
   if (adminClientsInFlight) return adminClientsInFlight;
 
   adminClientsInFlight = (async () => {
-    let response: Response;
-    try {
-      response = await adminGet("/api/admin/clients");
-    } catch {
-      throw new Error("Could not reach the admin clients service.");
-    }
-
-    let payload: unknown = null;
-    try {
-      payload = await response.json();
-    } catch {
-      // Non-JSON response.
-    }
-
-    if (!response.ok) {
-      throw new Error(
-        response.status === 401 || response.status === 403
-          ? "You do not have permission to view clients."
-          : "The clients list could not be loaded.",
-      );
-    }
-
-    const body =
-      isRecord(payload) && payload.success === true && "data" in payload
-        ? payload.data
-        : payload;
-    const items =
-      Array.isArray(body)
-        ? body
-        : isRecord(body) && Array.isArray(body.items)
-          ? body.items
-          : null;
-    if (!items) throw new Error("The clients list response was invalid.");
+    const items = await adminList("/api/admin/clients", "clients");
 
     const ads = getAllAdvertisements();
     return items.map((entry, index) => {
@@ -583,19 +656,26 @@ export async function getAdminClientsFromApi(): Promise<AdminClient[]> {
         clientText(entry, ["email", "businessEmail", "clientEmail"]) ||
         `client-${index + 1}@example.com`;
       const signInEmail =
-        clientText(entry, ["signInEmail", "ownerEmail", "loginEmail"]) ||
-        email;
+        clientText(entry, ["signInEmail", "ownerEmail", "loginEmail"]) || email;
       const clientAds = ads.filter(
         (ad) => ad.ownerEmail === signInEmail || ad.ownerEmail === email,
       );
       const name =
-        clientText(entry, ["name", "businessName", "companyName"]) || email;
+        clientText(entry, [
+          "clientOrBusiness",
+          "name",
+          "businessName",
+          "companyName",
+        ]) || email;
       const contact =
-        clientText(entry, ["contact", "contactName", "accountName", "fullName"]) ||
-        "Not provided";
+        clientText(entry, [
+          "contact",
+          "contactName",
+          "accountName",
+          "fullName",
+        ]) || "Not provided";
       const phone =
-        clientText(entry, ["phone", "phoneNumber", "mobile"]) ||
-        "Not provided";
+        clientText(entry, ["phone", "phoneNumber", "mobile"]) || "Not provided";
       const area =
         clientText(entry, ["area", "serviceArea", "city"]) || "Not provided";
       return {
@@ -662,7 +742,9 @@ export function getAdminEnquiries() {
   }));
 }
 
-export type AdminEnquiry = ReturnType<typeof getAdminEnquiries>[number];
+export type AdminEnquiry = ReturnType<typeof getAdminEnquiries>[number] & {
+  replyStatus?: EnquiryUpdate["status"];
+};
 
 let adminEnquiriesInFlight: Promise<AdminEnquiry[]> | null = null;
 
@@ -670,39 +752,7 @@ export async function getAdminEnquiriesFromApi(): Promise<AdminEnquiry[]> {
   if (adminEnquiriesInFlight) return adminEnquiriesInFlight;
 
   adminEnquiriesInFlight = (async () => {
-    let response: Response;
-    try {
-      response = await adminGet("/api/admin/enquiries");
-    } catch {
-      throw new Error("Could not reach the admin enquiries service.");
-    }
-
-    let payload: unknown = null;
-    try {
-      payload = await response.json();
-    } catch {
-      // Non-JSON response.
-    }
-
-    if (!response.ok) {
-      throw new Error(
-        response.status === 401 || response.status === 403
-          ? "You do not have permission to view enquiries."
-          : "The enquiries list could not be loaded.",
-      );
-    }
-
-    const body =
-      isRecord(payload) && payload.success === true && "data" in payload
-        ? payload.data
-        : payload;
-    const items =
-      Array.isArray(body)
-        ? body
-        : isRecord(body) && Array.isArray(body.items)
-          ? body.items
-          : null;
-    if (!items) throw new Error("The enquiries list response was invalid.");
+    const items = await adminList("/api/admin/enquiries", "enquiries");
 
     const updates = getEnquiryUpdates();
     return items.map((entry, index) => {
@@ -720,16 +770,23 @@ export async function getAdminEnquiriesFromApi(): Promise<AdminEnquiry[]> {
         id,
         name: clientText(entry, ["name", "contactName"]) || "Not provided",
         business:
-          clientText(entry, ["business", "businessName", "companyName"]) ||
-          "Not provided",
+          clientText(entry, [
+            "businessOrName",
+            "business",
+            "businessName",
+            "companyName",
+          ]) || "Not provided",
         email: clientText(entry, ["email", "businessEmail"]) || "Not provided",
         phone: clientText(entry, ["phone", "phoneNumber", "mobile"]),
         goal:
-          clientText(entry, ["goal", "objective", "purpose"]) ||
-          "Not provided",
+          clientText(entry, ["goal", "objective", "purpose"]) || "Not provided",
         message: clientText(entry, ["message", "requirements", "notes"]),
         createdAt: validCreatedAt,
         update: updates.find((update) => update.id === id),
+        replyStatus:
+          entry.replyStatus === "Replied"
+            ? ("Replied" as const)
+            : ("Awaiting reply" as const),
       };
     });
   })();
@@ -750,6 +807,7 @@ export const demoCabs = [
     phone: "+91 00000 00001",
     email: "arjun@example.com",
     area: "Hitec City",
+    screenId: "DEMO-SCR-01",
     status: "Available",
   },
   {
@@ -760,6 +818,7 @@ export const demoCabs = [
     phone: "+91 00000 00002",
     email: "ravi@example.com",
     area: "Airport Express",
+    screenId: "DEMO-SCR-02",
     status: "Assigned",
   },
   {
@@ -770,6 +829,7 @@ export const demoCabs = [
     phone: "+91 00000 00003",
     email: "sameer@example.com",
     area: "Banjara Hills",
+    screenId: "DEMO-SCR-03",
     status: "Available",
   },
   {
@@ -780,6 +840,7 @@ export const demoCabs = [
     phone: "+91 00000 00004",
     email: "kiran@example.com",
     area: "Secunderabad",
+    screenId: "DEMO-SCR-04",
     status: "Maintenance",
   },
 ] as const;
@@ -792,6 +853,7 @@ export type CabDriver = {
   phone: string;
   email: string;
   area: string;
+  screenId: string;
   status: "Available" | "Assigned" | "Maintenance";
 };
 
@@ -804,7 +866,7 @@ export function getCabDrivers(): CabDriver[] {
   if (
     !Array.isArray(saved) ||
     !saved.every(
-      (item: unknown): item is CabDriver =>
+      (item: unknown): item is Omit<CabDriver, "screenId"> =>
         typeof item === "object" &&
         item !== null &&
         ["id", "driver", "car", "model", "phone", "email", "area"].every(
@@ -818,18 +880,31 @@ export function getCabDrivers(): CabDriver[] {
     )
   )
     throw new Error("Saved driver records could not be read.");
-  return [...demoCabs, ...saved];
+  return [
+    ...demoCabs,
+    // Records saved before screen IDs existed default to an empty screen ID.
+    ...saved.map((item) => ({
+      ...item,
+      screenId:
+        "screenId" in item && typeof Reflect.get(item, "screenId") === "string"
+          ? String(Reflect.get(item, "screenId"))
+          : "",
+    })),
+  ];
 }
 
-/** Creates a browser-local directory entry and records the creating admin. */
-export function createCabDriver(input: Omit<CabDriver, "id">) {
-  if (!isAdminSessionActive()) throw new Error("Sign in to create a driver.");
+function validateDriverInput(
+  input: Omit<CabDriver, "id">,
+  existing: CabDriver[],
+  excludeId?: string,
+) {
   const driver = input.driver.trim();
   const car = input.car.trim().toUpperCase().replace(/[\s-]/g, "");
   const model = input.model.trim();
   const phone = input.phone.trim();
   const email = input.email.trim().toLowerCase();
   const area = input.area.trim();
+  const screenId = input.screenId.trim().toUpperCase();
   if (
     !driver ||
     !model ||
@@ -851,28 +926,46 @@ export function createCabDriver(input: Omit<CabDriver, "id">) {
     throw new Error("Enter a valid contact number with 7–15 digits.");
   if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     throw new Error("Enter a valid driver email address.");
+  if (!/^[A-Z0-9-]{3,50}$/.test(screenId))
+    throw new Error("Enter a screen ID of 3–50 letters, digits or hyphens.");
   if (!["Available", "Assigned", "Maintenance"].includes(input.status))
     throw new Error("Choose a valid driver availability.");
-  const existing = getCabDrivers();
+  const others = existing.filter((entry) => entry.id !== excludeId);
   if (
-    existing.some(
+    others.some(
       (entry) => entry.car.toUpperCase().replace(/[\s-]/g, "") === car,
     )
   )
     throw new Error("This vehicle number is already in the directory.");
-  const session: { email: string } = JSON.parse(
-    sessionStorage.getItem(adminSessionKey)!,
+  if (others.some((entry) => entry.screenId.toUpperCase() === screenId))
+    throw new Error("This screen ID is already assigned to another driver.");
+  return { driver, car, model, phone, email, area, screenId };
+}
+
+function getAdminEmail(): string {
+  const session: unknown = JSON.parse(
+    sessionStorage.getItem(adminSessionKey) ?? "null",
   );
+  if (
+    typeof session !== "object" ||
+    session === null ||
+    !("email" in session) ||
+    typeof session.email !== "string"
+  )
+    throw new Error("The admin session is invalid. Sign in again.");
+  return session.email;
+}
+
+/** Creates a browser-local directory entry and records the creating admin. */
+export function createCabDriver(input: Omit<CabDriver, "id">) {
+  if (!isAdminSessionActive()) throw new Error("Sign in to create a driver.");
+  const existing = getCabDrivers();
+  const fields = validateDriverInput(input, existing);
   const record = {
     id: `CAB-${crypto.randomUUID()}`,
-    driver,
-    car,
-    model,
-    phone,
-    email,
-    area,
+    ...fields,
     status: input.status,
-    createdBy: session.email,
+    createdBy: getAdminEmail(),
     createdAt: new Date().toISOString(),
   };
   localStorage.setItem(
@@ -885,4 +978,33 @@ export function createCabDriver(input: Omit<CabDriver, "id">) {
     ]),
   );
   return record;
+}
+
+/** Updates a browser-local directory entry, including the editable screen ID. */
+export function updateCabDriver(id: string, input: Omit<CabDriver, "id">) {
+  if (!isAdminSessionActive()) throw new Error("Sign in to edit a driver.");
+  if (demoCabs.some((sample) => sample.id === id))
+    throw new Error("Sample drivers cannot be edited.");
+  const existing = getCabDrivers();
+  if (!existing.some((entry) => entry.id === id))
+    throw new Error("This driver no longer exists. Reload the list.");
+  const fields = validateDriverInput(input, existing, id);
+  localStorage.setItem(
+    driversKey,
+    JSON.stringify(
+      existing
+        .filter((entry) => !demoCabs.some((sample) => sample.id === entry.id))
+        .map((entry) =>
+          entry.id === id
+            ? {
+                ...entry,
+                ...fields,
+                status: input.status,
+                updatedBy: getAdminEmail(),
+                updatedAt: new Date().toISOString(),
+              }
+            : entry,
+        ),
+    ),
+  );
 }

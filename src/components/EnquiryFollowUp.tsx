@@ -5,15 +5,19 @@ export function EnquiryFollowUp({
   id,
   business,
   update,
+  replyStatus,
+  knownEnquiryIds,
   onSaved,
 }: {
   id: string;
   business: string;
   update?: EnquiryUpdate;
+  replyStatus?: EnquiryUpdate["status"];
+  knownEnquiryIds?: readonly string[];
   onSaved: () => void;
 }) {
   const [status, setStatus] = useState<EnquiryUpdate["status"]>(
-    update?.status ?? "Awaiting reply",
+    update?.status ?? replyStatus ?? "Awaiting reply",
   );
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
@@ -22,7 +26,7 @@ export function EnquiryFollowUp({
     event.preventDefault();
     setSaved("");
     try {
-      saveEnquiryUpdate(id, status, note);
+      saveEnquiryUpdate(id, status, note, knownEnquiryIds);
       setNote("");
       setError("");
       setSaved("Enquiry follow-up saved.");

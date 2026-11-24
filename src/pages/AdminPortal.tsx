@@ -1,6 +1,5 @@
-import { useCallback, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
-  getCabDrivers,
   getAdminClients,
   getAdminEnquiries,
   getAdminDashboardSummary,
@@ -8,6 +7,9 @@ import {
   getAdminEnquiriesFromApi,
 } from "../lib/admin";
 import { CreateDriver } from "../components/CreateDriver";
+import { EditDriver } from "../components/EditDriver";
+import { listDrivers } from "../lib/driverAdminApi";
+import type { AdminEnquiry, CabDriver } from "../lib/admin";
 import { approveAdvertisement, getAllAdvertisements } from "../lib/portal";
 import type { Advertisement } from "../lib/advertisements";
 import { moneyFormat, numberFormat } from "../lib/campaign";
@@ -37,7 +39,6 @@ function loadData() {
         clients: getAdminClients(),
         enquiries: getAdminEnquiries(),
         ads: getAllAdvertisements(),
-        cabs: getCabDrivers(),
       },
       error: "",
     };
@@ -181,7 +182,10 @@ export function AdminPortal() {
     refresh: refreshClients,
   } = useClientResource(loadApiClients);
   const loadApiEnquiries = useCallback(
-    () => (section === "enquiries" ? getAdminEnquiriesFromApi() : Promise.resolve(null)),
+    () =>
+      section === "enquiries"
+        ? getAdminEnquiriesFromApi()
+        : Promise.resolve(null),
     [section],
   );
   const {
@@ -192,6 +196,8 @@ export function AdminPortal() {
   } = useClientResource(loadApiEnquiries);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [liveCabs, setLiveCabs] = useState<CabDriver[] | null>(null);
+  const [cabsError, setCabsError] = useState("");
   const [enquiryFilter, setEnquiryFilter] = useState<
     "All" | "Awaiting reply" | "Replied"
   >("All");
@@ -204,27 +210,50 @@ export function AdminPortal() {
           ? "approvals"
           : section;
   const { data, error } = result;
+  function refreshCabs() {
+    if (section !== "cab" && section !== "cabs") return;
+    listDrivers().then(
+      (drivers) => {
+        setLiveCabs(drivers);
+        setCabsError("");
+      },
+      (loadError) => {
+        setLiveCabs(null);
+        setCabsError(
+          loadError instanceof Error
+            ? loadError.message
+            : "The driver directory could not be loaded.",
+        );
+      },
+    );
+  }
+  useEffect(refreshCabs, []);
+  const cabs = liveCabs ?? [];
   const query = search.trim().toLowerCase();
   const matches = (...values: string[]) =>
     values.join(" ").toLowerCase().includes(query);
-  const enquiries = apiEnquiries ?? data?.enquiries ?? [];
+  const enquiries: AdminEnquiry[] =
+    section === "enquiries" ? (apiEnquiries ?? []) : (data?.enquiries ?? []);
   const enquiryCounts = {
     All: enquiries.length,
-    "Awaiting reply":
-      enquiries.filter((entry) => entry.update?.status !== "Replied").length,
-    Replied:
-      enquiries.filter((entry) => entry.update?.status === "Replied").length,
+    "Awaiting reply": enquiries.filter(
+      (entry) => (entry.update?.status ?? entry.replyStatus) !== "Replied",
+    ).length,
+    Replied: enquiries.filter(
+      (entry) => (entry.update?.status ?? entry.replyStatus) === "Replied",
+    ).length,
   };
   const filteredEnquiries = enquiries.filter(
     (entry) =>
       (enquiryFilter === "All" ||
-        (entry.update?.status ?? "Awaiting reply") === enquiryFilter) &&
+        (entry.update?.status ?? entry.replyStatus ?? "Awaiting reply") ===
+          enquiryFilter) &&
       matches(entry.name, entry.business, entry.email, entry.message),
   );
   const clients = apiClients ?? [];
   const ad = data?.ads.find((entry) => entry.id === id);
   const client = clients.find((entry) => entry.id === id);
-  const cab = data?.cabs.find((entry) => entry.id === id);
+  const cab = cabs.find((entry) => entry.id === id);
   const pending =
     data?.ads.filter((entry) => entry.status === "Pending approval") ?? [];
   const title =
@@ -383,7 +412,9 @@ export function AdminPortal() {
                     [
                       "Ads awaiting approval",
                       dashboardSummary
-                        ? numberFormat.format(dashboardSummary.adsAwaitingApproval)
+                        ? numberFormat.format(
+                            dashboardSummary.adsAwaitingApproval,
+                          )
                         : "—",
                       "approvals",
                       "Review ads",
@@ -433,7 +464,9 @@ export function AdminPortal() {
                     </span>
                     <strong>
                       {dashboardSummary
-                        ? moneyFormat.format(dashboardSummary.totalRevenueTillDate)
+                        ? moneyFormat.format(
+                            dashboardSummary.totalRevenueTillDate,
+                          )
                         : "—"}
                     </strong>
                     <span className="dashboard-stat-foot">
@@ -505,7 +538,10 @@ export function AdminPortal() {
                 {clientsError && (
                   <p className="error" role="alert">
                     {clientsError}{" "}
-                    <button className="button ghost small" onClick={refreshClients}>
+                    <button
+                      className="button ghost small"
+                      onClick={refreshClients}
+                    >
                       Retry clients
                     </button>
                   </p>
@@ -561,11 +597,13 @@ export function AdminPortal() {
                     </tbody>
                   </table>
                 </div>
-                {!clients.some((entry) =>
-                  matches(entry.name, entry.email, entry.contact),
-                ) && (
-                  <p className="admin-empty">No clients match your search.</p>
-                )}
+                {!clientsLoading &&
+                  !clientsError &&
+                  !clients.some((entry) =>
+                    matches(entry.name, entry.email, entry.contact),
+                  ) && (
+                    <p className="admin-empty">No clients match your search.</p>
+                  )}
               </section>
             )}
             {section === "client" &&
@@ -610,6 +648,12 @@ export function AdminPortal() {
                     {adTable(client.ads)}
                   </section>
                 </>
+              ) : clientsLoading ? (
+                <p role="status">Loading client details...</p>
+              ) : clientsError ? (
+                <p className="error" role="alert">
+                  {clientsError}
+                </p>
               ) : (
                 <p className="error" role="alert">
                   Select a client from the clients list.
@@ -626,7 +670,10 @@ export function AdminPortal() {
                 {enquiriesError && (
                   <p className="error" role="alert">
                     {enquiriesError}{" "}
-                    <button className="button ghost small" onClick={refreshEnquiries}>
+                    <button
+                      className="button ghost small"
+                      onClick={refreshEnquiries}
+                    >
                       Retry enquiries
                     </button>
                   </p>
@@ -722,9 +769,11 @@ export function AdminPortal() {
                           </td>
                           <td>
                             <span
-                              className={`enquiry-reply-status ${entry.update?.status === "Replied" ? "enquiry-replied" : "enquiry-awaiting"}`}
+                              className={`enquiry-reply-status ${(entry.update?.status ?? entry.replyStatus) === "Replied" ? "enquiry-replied" : "enquiry-awaiting"}`}
                             >
-                              {entry.update?.status ?? "Awaiting reply"}
+                              {entry.update?.status ??
+                                entry.replyStatus ??
+                                "Awaiting reply"}
                             </span>
                           </td>
                           <td>
@@ -732,6 +781,10 @@ export function AdminPortal() {
                               id={entry.id}
                               business={entry.business}
                               update={entry.update}
+                              replyStatus={entry.replyStatus}
+                              knownEnquiryIds={enquiries.map(
+                                (enquiry) => enquiry.id,
+                              )}
                               onSaved={() => {
                                 setResult(loadData());
                                 refreshEnquiries();
@@ -743,15 +796,17 @@ export function AdminPortal() {
                     </tbody>
                   </table>
                 </div>
-                {filteredEnquiries.length === 0 && (
-                  <p className="admin-empty">
-                    {enquiryCounts.All === 0
-                      ? "No enquiries yet."
-                      : enquiryFilter === "All"
-                        ? "No enquiries match your search."
-                        : "No enquiries match the selected reply status and search."}
-                  </p>
-                )}
+                {!enquiriesLoading &&
+                  !enquiriesError &&
+                  filteredEnquiries.length === 0 && (
+                    <p className="admin-empty">
+                      {enquiryCounts.All === 0
+                        ? "No enquiries yet."
+                        : enquiryFilter === "All"
+                          ? "No enquiries match your search."
+                          : "No enquiries match the selected reply status and search."}
+                    </p>
+                  )}
               </section>
             )}
             {section === "cabs" && (
@@ -760,8 +815,8 @@ export function AdminPortal() {
                   <div>
                     <h2>Cab & driver directory</h2>
                     <p>
-                      Includes fictional sample drivers and locally created
-                      records. This directory is not live fleet telemetry.
+                      Driver and vehicle records from the directory. This is not
+                      live fleet telemetry.
                     </p>
                   </div>
                 </div>
@@ -769,8 +824,14 @@ export function AdminPortal() {
                   onCreated={() => {
                     setSearch("");
                     setResult(loadData());
+                    refreshCabs();
                   }}
                 />
+                {cabsError && (
+                  <p className="error" role="alert">
+                    {cabsError}
+                  </p>
+                )}
                 <div className="dashboard-table-scroll">
                   <table className="dashboard-table admin-table">
                     <thead>
@@ -780,6 +841,7 @@ export function AdminPortal() {
                           "Car number / model",
                           "Contact details",
                           "Service area",
+                          "Screen ID",
                           "Availability",
                           "Details",
                         ].map((label) => (
@@ -790,7 +852,7 @@ export function AdminPortal() {
                       </tr>
                     </thead>
                     <tbody>
-                      {data.cabs
+                      {cabs
                         .filter((cab) =>
                           matches(
                             cab.driver,
@@ -798,6 +860,7 @@ export function AdminPortal() {
                             cab.phone,
                             cab.email,
                             cab.area,
+                            cab.screenId,
                           ),
                         )
                         .map((cab) => (
@@ -817,6 +880,7 @@ export function AdminPortal() {
                               {cab.email}
                             </td>
                             <td>{cab.area}</td>
+                            <td>{cab.screenId || "Not assigned"}</td>
                             <td>{cab.status}</td>
                             <td>
                               <a
@@ -831,17 +895,19 @@ export function AdminPortal() {
                         ))}
                     </tbody>
                   </table>
-                  {!data.cabs.some((cab) =>
-                    matches(
-                      cab.driver,
-                      cab.car,
-                      cab.phone,
-                      cab.email,
-                      cab.area,
-                    ),
-                  ) && (
-                    <p className="admin-empty">No cabs match your search.</p>
-                  )}
+                  {liveCabs &&
+                    !cabs.some((cab) =>
+                      matches(
+                        cab.driver,
+                        cab.car,
+                        cab.phone,
+                        cab.email,
+                        cab.area,
+                        cab.screenId,
+                      ),
+                    ) && (
+                      <p className="admin-empty">No cabs match your search.</p>
+                    )}
                 </div>
               </section>
             )}
@@ -858,10 +924,7 @@ export function AdminPortal() {
                     <div className="dashboard-panel-heading">
                       <div>
                         <h2>Driver & vehicle details</h2>
-                        <p>
-                          Fictional demo record. Contact numbers and car
-                          identifiers are placeholders.
-                        </p>
+                        <p>Driver and vehicle details from the directory.</p>
                       </div>
                       <span className="dashboard-panel-tag">{cab.status}</span>
                     </div>
@@ -874,6 +937,7 @@ export function AdminPortal() {
                         ["Phone number", cab.phone],
                         ["Email address", cab.email],
                         ["Service area", cab.area],
+                        ["Screen ID", cab.screenId || "Not assigned"],
                         ["Availability", cab.status],
                       ].map(([label, value]) => (
                         <div key={label}>
@@ -882,7 +946,21 @@ export function AdminPortal() {
                         </div>
                       ))}
                     </dl>
+                    <EditDriver
+                      key={cab.id + cab.screenId + cab.status}
+                      driver={cab}
+                      onSaved={() => {
+                        setResult(loadData());
+                        refreshCabs();
+                      }}
+                    />
                   </section>
+                ) : cabsError ? (
+                  <p className="error" role="alert">
+                    {cabsError}
+                  </p>
+                ) : !liveCabs ? (
+                  <p role="status">Loading driver details...</p>
                 ) : (
                   <p className="error" role="alert">
                     This cab driver was not found. Select a record from the cab

@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
-import { getAdminRedirect, startAdminSession } from "../lib/admin";
-import { loginClient } from "../lib/clientAuth";
+import { getAdminRedirect, loginAdmin, startAdminSession } from "../lib/admin";
 
 export function AdminLogin() {
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
@@ -11,9 +11,11 @@ export function AdminLogin() {
     const data = new FormData(event.currentTarget);
     const email = String(data.get("email") ?? "").trim();
     const password = String(data.get("password") ?? "");
+    setBusy(true);
+    setError("");
     try {
-      await loginClient(email, password);
-      startAdminSession(email);
+      const token = await loginAdmin(email, password);
+      startAdminSession(email, token);
       window.location.assign(getAdminRedirect(window.location.search));
     } catch (sessionError) {
       setError(
@@ -21,6 +23,7 @@ export function AdminLogin() {
           ? sessionError.message
           : "Admin sign-in failed. Check your credentials and try again.",
       );
+      setBusy(false);
     }
   }
 
@@ -97,8 +100,12 @@ export function AdminLogin() {
                 </button>
               </div>
             </div>
-            <button type="submit" className="button yellow login-submit">
-              Sign in to admin portal
+            <button
+              type="submit"
+              className="button yellow login-submit"
+              disabled={busy}
+            >
+              {busy ? "Signing in…" : "Sign in to admin portal"}
             </button>
             <p className="error" role="alert">
               {error}

@@ -96,6 +96,7 @@ test("driver creation validates input, rejects duplicate vehicles and persists a
     phone: "+91 98765 43210",
     email: "DRIVER@example.com",
     area: "Hitec City",
+    screenId: "scr-test-01",
     status: "Available" as const,
   };
   expect(() => createCabDriver(input)).toThrow("Sign in");

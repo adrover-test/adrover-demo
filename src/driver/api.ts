@@ -1,4 +1,3 @@
-import { demoApi } from "./demo";
 import type { Lang } from "./i18n";
 
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? "")
@@ -191,10 +190,13 @@ export class ApiError extends Error {
   }
 }
 
-export const getToken = () => localStorage.getItem(tokenKey);
+export const getToken = () => sessionStorage.getItem(tokenKey);
 export const setToken = (token: string) =>
-  localStorage.setItem(tokenKey, token);
-export const clearToken = () => localStorage.removeItem(tokenKey);
+  sessionStorage.setItem(tokenKey, token);
+export const clearToken = () => {
+  sessionStorage.removeItem(tokenKey);
+  localStorage.removeItem(tokenKey);
+};
 
 let currentLanguage: Lang = "en";
 export const setRequestLanguage = (lang: Lang) => {
@@ -266,19 +268,19 @@ async function request<T>(
   return (await response.json()) as T;
 }
 
-export const isDemo = baseUrl === "";
-
 const liveApi = {
-  requestOtp: (mobile: string) =>
-    request<void>("POST", "/auth/otp/request", {
-      body: { mobile },
-      auth: false,
-    }),
-  verifyOtp: (mobile: string, otp: string) =>
-    request<{ accessToken: string }>("POST", "/auth/otp/verify", {
-      body: { mobile, otp },
-      auth: false,
-    }),
+  /** Credential login: the backend verifies the password hash and issues a JWT. */
+  loginWithPassword: async (mobile: string, password: string) => {
+    const response = await request<{ data?: { accessToken?: string } }>(
+      "POST",
+      "/auth/login",
+      { body: { phone: mobile, password }, auth: false },
+    );
+    const accessToken = response?.data?.accessToken;
+    if (!accessToken)
+      throw new ApiError("", 500, "POST /api/v1/drivers/auth/login");
+    return { accessToken };
+  },
   getProfile: () => request<DriverProfile>("GET", "/profile"),
   updateProfile: (update: ProfileUpdate) =>
     request<DriverProfile>("PUT", "/profile", { body: update }),
@@ -332,4 +334,4 @@ const liveApi = {
     }),
 };
 
-export const api: typeof liveApi = isDemo ? demoApi : liveApi;
+export const api = liveApi;
