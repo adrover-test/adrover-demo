@@ -6,14 +6,12 @@ export function EnquiryFollowUp({
   business,
   update,
   replyStatus,
-  knownEnquiryIds,
   onSaved,
 }: {
   id: string;
   business: string;
   update?: EnquiryUpdate;
   replyStatus?: EnquiryUpdate["status"];
-  knownEnquiryIds?: readonly string[];
   onSaved: () => void;
 }) {
   const [status, setStatus] = useState<EnquiryUpdate["status"]>(

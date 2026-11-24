@@ -10,7 +10,7 @@ import { CreateDriver } from "../components/CreateDriver";
 import { EditDriver } from "../components/EditDriver";
 import { DriverOperations } from "../components/DriverOperations";
 import { listDrivers } from "../lib/driverAdminApi";
-import type { AdminEnquiry, CabDriver } from "../lib/admin";
+import type { CabDriver } from "../lib/admin";
 import { approveAdvertisement, getAllAdvertisements } from "../lib/portal";
 import type { Advertisement } from "../lib/advertisements";
 import { moneyFormat, numberFormat } from "../lib/campaign";
@@ -787,9 +787,6 @@ export function AdminPortal() {
                               business={entry.business}
                               update={entry.update}
                               replyStatus={entry.replyStatus}
-                              knownEnquiryIds={enquiries.map(
-                                (enquiry) => enquiry.id,
-                              )}
                               onSaved={() => {
                                 setResult(loadData());
                                 refreshEnquiries();

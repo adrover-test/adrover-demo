@@ -147,16 +147,19 @@ function statusCountFrom(
   );
 }
 
-function adminRequestHeaders(): Record<string, string> {
+function adminRequestHeaders(includeAuth = true): Record<string, string> {
   const token = getAdminToken();
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (token) {
+  if (includeAuth && token) {
     headers.Authorization = `Bearer ${token}`;
   }
   return headers;
 }
 
-async function adminGet(path: string): Promise<Response> {
+async function adminGet(
+  path: string,
+  includeAuth = true,
+): Promise<Response> {
   return fetch(`${baseUrl}${path}`, {
     method: "GET",
     headers: adminRequestHeaders(includeAuth),
@@ -176,6 +179,101 @@ async function adminPut(
     },
     body: JSON.stringify(body),
   });
+}
+
+async function adminList(
+  path: string,
+  key: string,
+): Promise<Record<string, unknown>[]> {
+  let response: Response;
+  try {
+    response = await adminGet(path);
+  } catch {
+    throw new Error("Could not reach the admin service.");
+  }
+
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {
+    // Non-JSON response.
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      response.status === 401 || response.status === 403
+        ? "Your admin session has expired. Sign in again."
+        : "The admin data could not be loaded.",
+    );
+  }
+
+  const body =
+    isRecord(payload) && payload.success === true && "data" in payload
+      ? payload.data
+      : payload;
+  const list =
+    isRecord(body) && Array.isArray(field(body, [key]))
+      ? (field(body, [key]) as unknown[])
+      : Array.isArray(body)
+        ? body
+        : [];
+  if (!list.every(isRecord)) {
+    throw new Error("The admin data response was invalid.");
+  }
+  return list;
+}
+
+export async function loginAdmin(
+  email: string,
+  password: string,
+): Promise<string | undefined> {
+  if (!email.trim() || !email.includes("@")) {
+    throw new Error("Enter a valid admin email.");
+  }
+  if (!password) {
+    throw new Error("Enter your admin password.");
+  }
+  if (!baseUrl) return undefined;
+
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/api/v1/auth/admin-login`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email: email.trim(), password }),
+    });
+  } catch {
+    throw new Error("Could not reach the admin sign-in service.");
+  }
+
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {
+    // Non-JSON response.
+  }
+  if (!response.ok) {
+    throw new Error(
+      isRecord(payload) && typeof payload.message === "string"
+        ? payload.message
+        : "Admin sign-in failed. Check your credentials.",
+    );
+  }
+  const body =
+    isRecord(payload) && payload.success === true && "data" in payload
+      ? payload.data
+      : payload;
+  if (
+    !isRecord(body) ||
+    typeof body.accessToken !== "string" ||
+    !body.accessToken
+  ) {
+    throw new Error("The server returned an unexpected sign-in response.");
+  }
+  return body.accessToken;
 }
 
 let dashboardSummaryInFlight: Promise<AdminDashboardSummary> | null = null;
@@ -404,7 +502,6 @@ export async function saveEnquiryUpdate(
   id: string,
   status: EnquiryUpdate["status"],
   note: string,
-  knownEnquiryIds: readonly string[] = [],
 ) {
   if (!isAdminSessionActive()) throw new Error("Sign in to update an enquiry.");
   if (status !== "Awaiting reply" && status !== "Replied")
