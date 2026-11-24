@@ -19,6 +19,7 @@
   "device.title": "Tablet",
   "device.online": "Connected",
   "device.offline": "Not connected",
+  "device.unknown": "Connection not verified",
   "device.not_assigned": "No tablet assigned",
   "device.lastSync": "Last synced: {{time}}",
   "device.neverSynced": "Not synced yet",

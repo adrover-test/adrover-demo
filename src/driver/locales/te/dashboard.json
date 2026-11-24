@@ -19,6 +19,7 @@
   "device.title": "టాబ్లెట్",
   "device.online": "కనెక్ట్ అయింది",
   "device.offline": "కనెక్ట్ కాలేదు",
+  "device.unknown": "కనెక్షన్ నిర్ధారించబడలేదు",
   "device.not_assigned": "టాబ్లెట్ కేటాయించలేదు",
   "device.lastSync": "చివరి సింక్: {{time}}",
   "device.neverSynced": "ఇంకా సింక్ కాలేదు",

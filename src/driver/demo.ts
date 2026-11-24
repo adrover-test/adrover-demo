@@ -14,7 +14,6 @@ import type {
 } from "./api";
 
 // Demo mode is on whenever no backend URL is configured.
-export const demoOtp = "123456";
 const storeKey = "adrover-driver-demo";
 
 const day = 86_400_000;
@@ -282,19 +281,7 @@ const toSummary = ({
   adminResponse,
 });
 
-export function demoSignIn(mobile: string) {
-  state = initialState(mobile);
-  save();
-}
-
 export const demoApi = {
-  requestOtp: async (_mobile: string) => wait(undefined),
-  verifyOtp: async (mobile: string, otp: string) => {
-    await wait(undefined);
-    if (otp !== demoOtp) throw new Error("Incorrect OTP");
-    if (state.profile.mobile !== mobile) demoSignIn(mobile);
-    return { accessToken: "demo-driver-token" };
-  },
   getProfile: () => wait(structuredClone(state.profile)),
   updateProfile: async (update: {
     name: string;

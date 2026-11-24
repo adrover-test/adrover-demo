@@ -14,6 +14,7 @@ const adTone: Record<AdStatus, string> = {
   playing: "wait",
   completed: "good",
   failed: "bad",
+  paused: "wait",
 };
 
 const isoDay = (offset: number) => {

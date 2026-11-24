@@ -5,24 +5,26 @@ export function EnquiryFollowUp({
   id,
   business,
   update,
+  replyStatus,
   onSaved,
 }: {
   id: string;
   business: string;
   update?: EnquiryUpdate;
+  replyStatus?: EnquiryUpdate["status"];
   onSaved: () => void;
 }) {
   const [status, setStatus] = useState<EnquiryUpdate["status"]>(
-    update?.status ?? "Awaiting reply",
+    update?.status ?? replyStatus ?? "Awaiting reply",
   );
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaved("");
     try {
-      saveEnquiryUpdate(id, status, note);
+      await saveEnquiryUpdate(id, status, note);
       setNote("");
       setError("");
       setSaved("Enquiry follow-up saved.");

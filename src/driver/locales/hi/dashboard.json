@@ -19,6 +19,7 @@
   "device.title": "टैबलेट",
   "device.online": "जुड़ा हुआ है",
   "device.offline": "जुड़ा नहीं है",
+  "device.unknown": "कनेक्शन की पुष्टि नहीं हुई",
   "device.not_assigned": "टैबलेट नहीं मिला है",
   "device.lastSync": "आखिरी सिंक: {{time}}",
   "device.neverSynced": "अभी तक सिंक नहीं हुआ",

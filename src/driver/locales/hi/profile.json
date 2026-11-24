@@ -41,6 +41,7 @@
   "vehicle.lastSync": "टैबलेट का आखिरी सिंक",
   "vehicle.tablet.online": "जुड़ा हुआ है",
   "vehicle.tablet.offline": "जुड़ा नहीं है",
+  "vehicle.tablet.unknown": "कनेक्शन की पुष्टि नहीं हुई",
   "vehicle.tablet.not_assigned": "टैबलेट नहीं मिला है",
   "vehicle.approval.approved": "मंज़ूर",
   "vehicle.approval.pending": "मंज़ूरी का इंतज़ार",

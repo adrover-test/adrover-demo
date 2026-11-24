@@ -3,7 +3,8 @@
 A complete React + TypeScript conversion of the supplied Adrover designs, using Vite.
 The site contains Home, Pricing, Contact us and an authenticated client workspace
 with saved campaigns, recorded playback, creative previews, account profile and
-payment history. The separate administrator demo remains browser-local.
+payment history. The administrator workspace includes a backend-backed driver
+directory; other administrator demo data remains browser-local.
 This project is a separate copy; the original design folder is unchanged.
 
 ## Run locally
@@ -68,19 +69,32 @@ and be at most 100 MB. The old `pricing.html#registration` URL redirects to
 | `admin-login.html`    | `src/pages/AdminLogin.tsx`     | Separate website-admin demo sign-in       |
 | `admin.html`          | `src/pages/AdminPortal.tsx`    | Clients, enquiries, cabs and ad approvals |
 
-### Website administrator demo
+### Website administrator and drivers
 
-Open `admin-login.html` (also linked from advertiser sign-in). Use any valid
-email and a demo password, not real credentials. The separate admin session is
-stored in `sessionStorage`; an advertiser sign-in does not open the admin area.
-This is a convenience gate only, **not real authentication or authorization**.
+With `VITE_API_BASE_URL` configured, sign in at `admin-login.html` using an
+existing SuperAdmin account. The separate admin session is stored in
+`sessionStorage`. Without an API URL the admin preview uses a browser-local
+session and cannot manage the driver directory.
 
 The admin overview shows client, enquiry, cab and pending-ad counts.
-Under Cabs & drivers, Create driver saves a name, vehicle number/model, phone,
-email, service area and availability. Vehicle numbers are normalised and duplicates
-are rejected. Saved entries appear in search, driver details and the overview cab
-count after reload. Records include the creating admin email/time and remain in
-this browser's local storage only; this does not register a driver with a backend.
+Under Cabs & drivers, create and edit database-backed drivers, including their
+screen ID. Generate and share the password before saving: only a one-way hash
+is stored and it cannot be viewed again. Generated passwords use short parts
+of the driver's name, vehicle number and phone plus random characters, and
+are at most 20 characters. Regenerate it when necessary.
+Drivers sign in at `driver-login.html` with their mobile number and password.
+Driver profiles persist address, language and private photos. Dashboard,
+assigned schedules, playback history, earnings, payouts, notifications and
+support tickets use the backend. Under a cab's **View details → Driver
+operations**, administrators assign campaigns with INR-per-play rates, record
+independently verified playback, schedule/update payouts, send notifications
+and respond to support tickets. Each assignment covers one UTC day; form
+timestamps are entered locally and sent as ISO UTC. Rates are immutable.
+Payouts are ledger records only: transfer funds separately, then record the
+external payment reference. Device connection is unverified until a heartbeat
+integration exists. Backend setup requires
+`database/migrations/20261124-driver-operations.sql` after the driver directory
+script and configured private Azure Blob Storage for photos/attachments.
 It also shows total ads across every client/status and total revenue till date
 from the shared sample billing records. Revenue counts successful campaign
 payments minus refunded campaign amounts, excluding wallet top-ups, pending

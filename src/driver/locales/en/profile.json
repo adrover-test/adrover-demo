@@ -41,6 +41,7 @@
   "vehicle.lastSync": "Last tablet sync",
   "vehicle.tablet.online": "Connected",
   "vehicle.tablet.offline": "Not connected",
+  "vehicle.tablet.unknown": "Connection not verified",
   "vehicle.tablet.not_assigned": "No tablet assigned",
   "vehicle.approval.approved": "Approved",
   "vehicle.approval.pending": "Waiting for approval",
