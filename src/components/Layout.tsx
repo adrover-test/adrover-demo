@@ -3,6 +3,7 @@ import { endDemoSession } from "../lib/portal";
 import { endAdminSession } from "../lib/admin";
 import { AdPageEntrance } from "./AdPageEntrance";
 import { HomeAssistant } from "./HomeAssistant";
+import { BrandLogo } from "./BrandLogo";
 
 const navigation = [
   ["index.html", "Home"],
@@ -13,15 +14,7 @@ const navigation = [
 ] as const;
 
 function Logo() {
-  return (
-    <a className="logo" href="index.html" aria-label="AdRover home">
-      <svg viewBox="0 0 40 40" aria-hidden="true">
-        <path d="M0 37 14 2h12l14 35H28L20 14 12 37Z" fill="#ffd21c" />
-        <path d="M18 25h4l3 8H15Z" fill="#101814" />
-      </svg>
-      <span>AdRover</span>
-    </a>
-  );
+  return <BrandLogo href="index.html" ariaLabel="AdRover home" />;
 }
 
 export function Layout({

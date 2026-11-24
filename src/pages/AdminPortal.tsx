@@ -1,17 +1,20 @@
-import { useState, type FormEvent } from "react";
+import { useCallback, useState, type FormEvent } from "react";
 import {
   getCabDrivers,
   getAdminClients,
   getAdminEnquiries,
+  getAdminDashboardSummary,
+  getAdminClientsFromApi,
+  getAdminEnquiriesFromApi,
 } from "../lib/admin";
 import { CreateDriver } from "../components/CreateDriver";
 import { approveAdvertisement, getAllAdvertisements } from "../lib/portal";
 import type { Advertisement } from "../lib/advertisements";
 import { moneyFormat, numberFormat } from "../lib/campaign";
 import { ViewAd } from "./ViewAd";
-import { getCollectedCampaignRevenue } from "../lib/billing";
 import { AdminCharts } from "../components/AdminCharts";
 import { EnquiryFollowUp } from "../components/EnquiryFollowUp";
+import { useClientResource } from "../lib/useClientResource";
 
 const sections = [
   ["dashboard", "Overview"],
@@ -149,14 +152,49 @@ function ApprovalForm({
 
 export function AdminPortal() {
   const [result, setResult] = useState(loadData);
+  const params = new URLSearchParams(window.location.search);
+  const section = params.get("section") ?? "dashboard";
+  const id = params.get("id");
+  const loadDashboardSummary = useCallback(
+    () =>
+      section === "dashboard"
+        ? getAdminDashboardSummary()
+        : Promise.resolve(null),
+    [section],
+  );
+  const loadApiClients = useCallback(
+    () =>
+      section === "clients" || section === "client"
+        ? getAdminClientsFromApi()
+        : Promise.resolve(null),
+    [section],
+  );
+  const {
+    data: dashboardSummary,
+    error: dashboardSummaryError,
+    refresh: refreshDashboardSummary,
+  } = useClientResource(loadDashboardSummary);
+  const {
+    data: apiClients,
+    loading: clientsLoading,
+    error: clientsError,
+    refresh: refreshClients,
+  } = useClientResource(loadApiClients);
+  const loadApiEnquiries = useCallback(
+    () => (section === "enquiries" ? getAdminEnquiriesFromApi() : Promise.resolve(null)),
+    [section],
+  );
+  const {
+    data: apiEnquiries,
+    loading: enquiriesLoading,
+    error: enquiriesError,
+    refresh: refreshEnquiries,
+  } = useClientResource(loadApiEnquiries);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [enquiryFilter, setEnquiryFilter] = useState<
     "All" | "Awaiting reply" | "Replied"
   >("All");
-  const params = new URLSearchParams(window.location.search);
-  const section = params.get("section") ?? "dashboard";
-  const id = params.get("id");
   const activeSection =
     section === "client"
       ? "clients"
@@ -169,24 +207,23 @@ export function AdminPortal() {
   const query = search.trim().toLowerCase();
   const matches = (...values: string[]) =>
     values.join(" ").toLowerCase().includes(query);
+  const enquiries = apiEnquiries ?? data?.enquiries ?? [];
   const enquiryCounts = {
-    All: data?.enquiries.length ?? 0,
+    All: enquiries.length,
     "Awaiting reply":
-      data?.enquiries.filter((entry) => entry.update?.status !== "Replied")
-        .length ?? 0,
+      enquiries.filter((entry) => entry.update?.status !== "Replied").length,
     Replied:
-      data?.enquiries.filter((entry) => entry.update?.status === "Replied")
-        .length ?? 0,
+      enquiries.filter((entry) => entry.update?.status === "Replied").length,
   };
-  const filteredEnquiries =
-    data?.enquiries.filter(
-      (entry) =>
-        (enquiryFilter === "All" ||
-          (entry.update?.status ?? "Awaiting reply") === enquiryFilter) &&
-        matches(entry.name, entry.business, entry.email, entry.message),
-    ) ?? [];
+  const filteredEnquiries = enquiries.filter(
+    (entry) =>
+      (enquiryFilter === "All" ||
+        (entry.update?.status ?? "Awaiting reply") === enquiryFilter) &&
+      matches(entry.name, entry.business, entry.email, entry.message),
+  );
+  const clients = apiClients ?? [];
   const ad = data?.ads.find((entry) => entry.id === id);
-  const client = data?.clients.find((entry) => entry.id === id);
+  const client = clients.find((entry) => entry.id === id);
   const cab = data?.cabs.find((entry) => entry.id === id);
   const pending =
     data?.ads.filter((entry) => entry.status === "Pending approval") ?? [];
@@ -304,7 +341,10 @@ export function AdminPortal() {
             </p>
             <button
               className="button ghost small"
-              onClick={() => setResult(loadData())}
+              onClick={() => {
+                setResult(loadData());
+                refreshDashboardSummary();
+              }}
             >
               Retry loading
             </button>
@@ -318,25 +358,33 @@ export function AdminPortal() {
                   {[
                     [
                       "Clients present",
-                      data.clients.length,
+                      dashboardSummary
+                        ? numberFormat.format(dashboardSummary.clientsPresent)
+                        : "—",
                       "clients",
                       "View clients",
                     ],
                     [
                       "Enquiries",
-                      data.enquiries.length,
+                      dashboardSummary
+                        ? numberFormat.format(dashboardSummary.enquiries)
+                        : "—",
                       "enquiries",
                       "View enquiries",
                     ],
                     [
                       "Cabs in directory",
-                      data.cabs.length,
+                      dashboardSummary
+                        ? numberFormat.format(dashboardSummary.cabsInDirectory)
+                        : "—",
                       "cabs",
                       "View cabs",
                     ],
                     [
                       "Ads awaiting approval",
-                      pending.length,
+                      dashboardSummary
+                        ? numberFormat.format(dashboardSummary.adsAwaitingApproval)
+                        : "—",
                       "approvals",
                       "Review ads",
                     ],
@@ -359,7 +407,11 @@ export function AdminPortal() {
                 >
                   <article className="dashboard-stat">
                     <span className="dashboard-stat-label">Total ads</span>
-                    <strong>{numberFormat.format(data.ads.length)}</strong>
+                    <strong>
+                      {dashboardSummary
+                        ? numberFormat.format(dashboardSummary.totalAds)
+                        : "—"}
+                    </strong>
                     <span className="dashboard-stat-foot">
                       All clients and campaign statuses
                     </span>
@@ -367,12 +419,9 @@ export function AdminPortal() {
                   <article className="dashboard-stat">
                     <span className="dashboard-stat-label">Total ad plays</span>
                     <strong>
-                      {numberFormat.format(
-                        data.ads.reduce(
-                          (total, advertisement) => total + advertisement.plays,
-                          0,
-                        ),
-                      )}
+                      {dashboardSummary
+                        ? numberFormat.format(dashboardSummary.totalAdPlays)
+                        : "—"}
                     </strong>
                     <span className="dashboard-stat-foot">
                       Delivered plays across all advertisements
@@ -383,20 +432,28 @@ export function AdminPortal() {
                       Total revenue till date
                     </span>
                     <strong>
-                      {moneyFormat.format(getCollectedCampaignRevenue())}
+                      {dashboardSummary
+                        ? moneyFormat.format(dashboardSummary.totalRevenueTillDate)
+                        : "—"}
                     </strong>
                     <span className="dashboard-stat-foot">
                       Collected campaign payments minus refunds
                     </span>
                   </article>
                 </section>
-                <p className="fine">
-                  Revenue excludes wallet top-ups, pending payments and unpaid
-                  approvals. Illustrative billing records only, not live
-                  revenue.
-                </p>
+                {dashboardSummaryError && (
+                  <p className="error" role="alert">
+                    {dashboardSummaryError}{" "}
+                    <button
+                      className="button ghost small"
+                      onClick={refreshDashboardSummary}
+                    >
+                      Retry summary
+                    </button>
+                  </p>
+                )}
                 <section className="dashboard-panel admin-section">
-                  <AdminCharts ads={data.ads} />
+                  <AdminCharts />
                 </section>
                 <section className="dashboard-panel admin-section">
                   <div className="dashboard-panel-heading">
@@ -442,6 +499,17 @@ export function AdminPortal() {
             )}
             {section === "clients" && (
               <section className="dashboard-panel" aria-label="Clients">
+                {clientsLoading && (
+                  <p role="status">Loading clients from the backend...</p>
+                )}
+                {clientsError && (
+                  <p className="error" role="alert">
+                    {clientsError}{" "}
+                    <button className="button ghost small" onClick={refreshClients}>
+                      Retry clients
+                    </button>
+                  </p>
+                )}
                 <div className="dashboard-table-scroll">
                   <table className="dashboard-table admin-table admin-clients-table">
                     <thead>
@@ -461,7 +529,7 @@ export function AdminPortal() {
                       </tr>
                     </thead>
                     <tbody>
-                      {data.clients
+                      {clients
                         .filter((entry) =>
                           matches(entry.name, entry.email, entry.contact),
                         )
@@ -474,7 +542,12 @@ export function AdminPortal() {
                             <td>{entry.contact}</td>
                             <td>{entry.email}</td>
                             <td>{entry.phone}</td>
-                            <td>{entry.ads.length}</td>
+                            <td>
+                              {numberFormat.format(
+                                (entry as { reportedAdsCount?: number })
+                                  .reportedAdsCount ?? entry.ads.length,
+                              )}
+                            </td>
                             <td>
                               <a
                                 className="button ghost small"
@@ -488,7 +561,7 @@ export function AdminPortal() {
                     </tbody>
                   </table>
                 </div>
-                {!data.clients.some((entry) =>
+                {!clients.some((entry) =>
                   matches(entry.name, entry.email, entry.contact),
                 ) && (
                   <p className="admin-empty">No clients match your search.</p>
@@ -547,6 +620,17 @@ export function AdminPortal() {
                 className="dashboard-panel admin-enquiries"
                 aria-label="Enquiry list"
               >
+                {enquiriesLoading && (
+                  <p role="status">Loading enquiries from the backend...</p>
+                )}
+                {enquiriesError && (
+                  <p className="error" role="alert">
+                    {enquiriesError}{" "}
+                    <button className="button ghost small" onClick={refreshEnquiries}>
+                      Retry enquiries
+                    </button>
+                  </p>
+                )}
                 <div
                   className="enquiry-summary"
                   role="group"
@@ -648,7 +732,10 @@ export function AdminPortal() {
                               id={entry.id}
                               business={entry.business}
                               update={entry.update}
-                              onSaved={() => setResult(loadData())}
+                              onSaved={() => {
+                                setResult(loadData());
+                                refreshEnquiries();
+                              }}
                             />
                           </td>
                         </tr>
@@ -831,7 +918,7 @@ export function AdminPortal() {
                   <a
                     href={adminLink(
                       "client",
-                      data.clients.find((entry) =>
+                      clients.find((entry) =>
                         entry.ads.some((item) => item.id === ad.id),
                       )?.id,
                     )}

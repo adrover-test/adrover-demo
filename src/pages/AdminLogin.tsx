@@ -1,21 +1,25 @@
 import { useState, type FormEvent } from "react";
 import { getAdminRedirect, startAdminSession } from "../lib/admin";
+import { loginClient } from "../lib/clientAuth";
 
 export function AdminLogin() {
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  function signIn(event: FormEvent<HTMLFormElement>) {
+  async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
+    const email = String(data.get("email") ?? "").trim();
+    const password = String(data.get("password") ?? "");
     try {
-      startAdminSession(String(data.get("email") ?? ""));
+      await loginClient(email, password);
+      startAdminSession(email);
       window.location.assign(getAdminRedirect(window.location.search));
     } catch (sessionError) {
       setError(
         sessionError instanceof Error
           ? sessionError.message
-          : "The admin session could not be started.",
+          : "Admin sign-in failed. Check your credentials and try again.",
       );
     }
   }
@@ -101,10 +105,8 @@ export function AdminLogin() {
             </p>
           </form>
           <p className="login-disclaimer">
-            Preview environment: any valid email and a non-empty password opens
-            this browser-local workspace. Identities are not verified; no secure
-            admin access or live payments are connected. Use fictional
-            information, not real credentials.
+            Use a valid account to continue. This preview still includes demo
+            admin workspace content and does not process live campaign payments.
           </p>
           <div className="login-create">
             <span>Looking for your campaigns?</span>

@@ -4,9 +4,14 @@ import {
   getDemoEnquiries,
   getSavedProfile,
 } from "./portal";
+import { getClientToken } from "./clientAuth";
+import type { ChartRange } from "./chartPeriods";
 
 const adminSessionKey = "adrover-demo-admin-session";
 const enquiryUpdatesKey = "adrover-enquiry-updates";
+const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? "https://localhost:7100")
+  .trim()
+  .replace(/\/$/, "");
 
 export type EnquiryUpdate = {
   id: string;
@@ -15,6 +20,320 @@ export type EnquiryUpdate = {
   updatedBy: string;
   updatedAt: string;
 };
+
+export type AdminDashboardSummary = {
+  clientsPresent: number;
+  enquiries: number;
+  cabsInDirectory: number;
+  adsAwaitingApproval: number;
+  totalAds: number;
+  totalAdPlays: number;
+  totalRevenueTillDate: number;
+};
+
+export type OperationsOverviewPoint = {
+  key: string;
+  label: string;
+  value: number;
+};
+
+export type AdminOperationsOverview = {
+  adPlays: OperationsOverviewPoint[];
+  campaignRevenue: OperationsOverviewPoint[];
+  statusCounts: Record<"Active" | "Pending approval" | "Approved" | "Completed", number>;
+  totalAds: number;
+  periodPlays: number;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function field(record: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (key in record) return record[key];
+  }
+  return undefined;
+}
+
+function summaryCount(
+  record: Record<string, unknown>,
+  keys: string[],
+  label: string,
+): number {
+  const value = field(record, keys);
+  const number =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : NaN;
+  if (!Number.isFinite(number) || number < 0) {
+    throw new Error(`Admin ${label} could not be loaded.`);
+  }
+  return number;
+}
+
+function numericField(record: Record<string, unknown>, keys: string[]): number {
+  const value = field(record, keys);
+  const number =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : NaN;
+  return Number.isFinite(number) ? number : 0;
+}
+
+function parseOverviewPoints(
+  value: unknown,
+  valueKeys: string[],
+): OperationsOverviewPoint[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry, index) => {
+      if (!isRecord(entry)) return null;
+      const key =
+        String(
+          field(entry, ["key", "id", "periodKey", "date", "month", "period"]),
+        ) || `point-${index + 1}`;
+      const label =
+        String(field(entry, ["label", "name", "periodLabel", "month"]) ?? "") ||
+        key;
+      const number = numericField(entry, valueKeys);
+      return { key, label, value: number };
+    })
+    .filter((entry): entry is OperationsOverviewPoint => entry !== null);
+}
+
+function statusCountFrom(
+  source: Record<string, unknown>,
+  primaryKey: string,
+  fallbackKeys: string[],
+): number {
+  const nested = field(source, ["statusCounts", "statuses", "statusSummary"]);
+  if (isRecord(nested)) {
+    return Math.max(
+      0,
+      Math.floor(numericField(nested, [primaryKey, ...fallbackKeys])),
+    );
+  }
+  const statusList = field(source, ["advertisementsByStatus", "statusBreakdown"]);
+  if (Array.isArray(statusList)) {
+    const target = [primaryKey, ...fallbackKeys].map((value) =>
+      value.toLowerCase().replaceAll(" ", ""),
+    );
+    const matched = statusList.find((item) => {
+      if (!isRecord(item)) return false;
+      const status = String(field(item, ["status", "name"]) ?? "")
+        .toLowerCase()
+        .replaceAll(" ", "");
+      return target.includes(status);
+    });
+    if (isRecord(matched)) return Math.max(0, Math.floor(numericField(matched, ["count", "value", "total"])));
+  }
+  return Math.max(0, Math.floor(numericField(source, [primaryKey, ...fallbackKeys])));
+}
+
+function adminRequestHeaders(includeAuth = true): Record<string, string> {
+  const token = getClientToken();
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (includeAuth && token) {
+    headers.Authorization = `Bearer ${token}`;
+    headers["auth-token"] = token;
+  }
+  return headers;
+}
+
+async function adminGet(path: string, includeAuth = true): Promise<Response> {
+  return fetch(`${baseUrl}${path}`, {
+    method: "GET",
+    headers: adminRequestHeaders(includeAuth),
+  });
+}
+
+let dashboardSummaryInFlight: Promise<AdminDashboardSummary> | null = null;
+const operationsOverviewInFlight: Partial<
+  Record<ChartRange, Promise<AdminOperationsOverview>>
+> = {};
+
+export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary> {
+  if (dashboardSummaryInFlight) return dashboardSummaryInFlight;
+
+  dashboardSummaryInFlight = (async () => {
+    let response: Response;
+    try {
+      response = await adminGet("/api/admin/dashboard/summary");
+    } catch {
+      throw new Error("Could not reach the admin dashboard service.");
+    }
+
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {
+    // Non-JSON response.
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      response.status === 401 || response.status === 403
+        ? "You do not have permission to view the admin dashboard summary."
+        : "The admin dashboard summary could not be loaded.",
+    );
+  }
+
+  const body =
+    isRecord(payload) && payload.success === true && "data" in payload
+      ? payload.data
+      : payload;
+  if (!isRecord(body)) {
+    throw new Error("The admin dashboard summary response was invalid.");
+  }
+
+      return {
+        clientsPresent: summaryCount(
+          body,
+          ["clientsPresent", "totalClients", "clients", "clientCount"],
+          "client count",
+        ),
+        enquiries: summaryCount(
+          body,
+          ["enquiries", "totalEnquiries", "enquiryCount"],
+          "enquiry count",
+        ),
+        cabsInDirectory: summaryCount(
+          body,
+          ["cabsInDirectory", "totalCabs", "cabs", "cabCount", "driversCount"],
+          "cab count",
+        ),
+        adsAwaitingApproval: summaryCount(
+          body,
+          [
+            "adsAwaitingApproval",
+            "pendingApprovals",
+            "pendingAdvertisements",
+            "adsPendingApproval",
+          ],
+          "pending approval count",
+        ),
+        totalAds: summaryCount(
+          body,
+          ["totalAds", "advertisements", "advertisementCount"],
+          "advertisement count",
+        ),
+        totalAdPlays: summaryCount(
+          body,
+          ["totalAdPlays", "adPlays", "totalPlays", "plays"],
+          "ad play count",
+        ),
+        totalRevenueTillDate: summaryCount(
+          body,
+          ["totalRevenueTillDate", "totalRevenue", "collectedRevenue", "revenue"],
+          "revenue",
+        ),
+      };
+    })();
+
+    try {
+      return await dashboardSummaryInFlight;
+    } finally {
+      dashboardSummaryInFlight = null;
+    }
+  }
+
+  export async function getAdminOperationsOverview(
+  range: ChartRange,
+): Promise<AdminOperationsOverview> {
+  const cached = operationsOverviewInFlight[range];
+  if (cached) return cached;
+
+  operationsOverviewInFlight[range] = (async () => {
+    let response: Response;
+    try {
+      response = await adminGet(
+        `/api/admin/dashboard/operations-overview?range=${encodeURIComponent(range)}`,
+      );
+    } catch {
+      throw new Error("Could not reach the admin operations overview service.");
+    }
+
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {
+    // Non-JSON response.
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      response.status === 401 || response.status === 403
+        ? "You do not have permission to view operations overview data."
+        : "The operations overview could not be loaded.",
+    );
+  }
+
+  const body =
+    isRecord(payload) && payload.success === true && "data" in payload
+      ? payload.data
+      : payload;
+  if (!isRecord(body)) {
+    throw new Error("The operations overview response was invalid.");
+  }
+
+      const adPlays = parseOverviewPoints(
+        field(body, ["monthlyAdPlays", "adPlays", "plays", "playsByPeriod"]),
+        ["totalPlays", "value", "plays", "count", "total"],
+      );
+      const campaignRevenue = parseOverviewPoints(
+        field(body, [
+          "monthlyCampaignRevenue",
+          "campaignRevenue",
+          "revenue",
+          "revenueByPeriod",
+        ]),
+        ["netRevenue", "value", "amount", "revenue", "total"],
+      );
+      const statusCounts = {
+        Active: statusCountFrom(body, "Active", ["active"]),
+        "Pending approval": statusCountFrom(body, "Pending approval", [
+          "pendingApproval",
+          "pendingApprovals",
+          "PendingApproval",
+        ]),
+        Approved: statusCountFrom(body, "Approved", ["approved"]),
+        Completed: statusCountFrom(body, "Completed", ["completed"]),
+      } as const;
+      return {
+        adPlays,
+        campaignRevenue,
+        statusCounts,
+        totalAds: Math.max(
+          0,
+          Math.floor(
+            numericField(body, ["totalAds", "advertisements", "advertisementCount"]),
+          ),
+        ),
+        periodPlays: Math.max(
+          0,
+          Math.floor(
+            numericField(body, [
+              "totalAdPlaysInPeriod",
+              "periodPlays",
+              "totalAdPlays",
+              "totalPlays",
+            ]),
+          ),
+        ),
+      };
+    })();
+
+    try {
+      return await operationsOverviewInFlight[range]!;
+    } finally {
+      delete operationsOverviewInFlight[range];
+    }
+  }
 
 function getEnquiryUpdates(): EnquiryUpdate[] {
   const serialized = localStorage.getItem(enquiryUpdatesKey);
@@ -194,6 +513,123 @@ export function getAdminClients() {
   ];
 }
 
+export type AdminClient = ReturnType<typeof getAdminClients>[number];
+
+let adminClientsInFlight: Promise<AdminClient[]> | null = null;
+
+function clientText(record: Record<string, unknown>, keys: string[]): string {
+  const value = field(record, keys);
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function clientCount(record: Record<string, unknown>, keys: string[]): number {
+  const value = field(record, keys);
+  const number =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : NaN;
+  return Number.isFinite(number) && number >= 0 ? Math.floor(number) : 0;
+}
+
+function clientFlag(record: Record<string, unknown>, keys: string[]): boolean {
+  const value = field(record, keys);
+  return value === true || value === 1 || value === "true" || value === "1";
+}
+
+export async function getAdminClientsFromApi(): Promise<AdminClient[]> {
+  if (adminClientsInFlight) return adminClientsInFlight;
+
+  adminClientsInFlight = (async () => {
+    let response: Response;
+    try {
+      response = await adminGet("/api/admin/clients");
+    } catch {
+      throw new Error("Could not reach the admin clients service.");
+    }
+
+    let payload: unknown = null;
+    try {
+      payload = await response.json();
+    } catch {
+      // Non-JSON response.
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        response.status === 401 || response.status === 403
+          ? "You do not have permission to view clients."
+          : "The clients list could not be loaded.",
+      );
+    }
+
+    const body =
+      isRecord(payload) && payload.success === true && "data" in payload
+        ? payload.data
+        : payload;
+    const items =
+      Array.isArray(body)
+        ? body
+        : isRecord(body) && Array.isArray(body.items)
+          ? body.items
+          : null;
+    if (!items) throw new Error("The clients list response was invalid.");
+
+    const ads = getAllAdvertisements();
+    return items.map((entry, index) => {
+      if (!isRecord(entry)) throw new Error("A client record was invalid.");
+      const email =
+        clientText(entry, ["email", "businessEmail", "clientEmail"]) ||
+        `client-${index + 1}@example.com`;
+      const signInEmail =
+        clientText(entry, ["signInEmail", "ownerEmail", "loginEmail"]) ||
+        email;
+      const clientAds = ads.filter(
+        (ad) => ad.ownerEmail === signInEmail || ad.ownerEmail === email,
+      );
+      const name =
+        clientText(entry, ["name", "businessName", "companyName"]) || email;
+      const contact =
+        clientText(entry, ["contact", "contactName", "accountName", "fullName"]) ||
+        "Not provided";
+      const phone =
+        clientText(entry, ["phone", "phoneNumber", "mobile"]) ||
+        "Not provided";
+      const area =
+        clientText(entry, ["area", "serviceArea", "city"]) || "Not provided";
+      return {
+        id:
+          clientText(entry, ["id", "clientId", "userId"]) ||
+          signInEmail ||
+          email,
+        name,
+        contact,
+        email,
+        phone,
+        area,
+        advertiserType:
+          clientText(entry, ["advertiserType", "type"]) || "Not provided",
+        signInEmail,
+        profileSaved: clientFlag(entry, ["profileSaved", "hasProfile"]),
+        ads: clientAds,
+        reportedAdsCount: clientCount(entry, [
+          "advertisements",
+          "advertisementCount",
+          "adsCount",
+          "totalAds",
+        ]),
+      };
+    });
+  })();
+
+  try {
+    return await adminClientsInFlight;
+  } finally {
+    adminClientsInFlight = null;
+  }
+}
+
 export function getAdminEnquiries() {
   const updates = getEnquiryUpdates();
   return [
@@ -224,6 +660,85 @@ export function getAdminEnquiries() {
     ...enquiry,
     update: updates.find((update) => update.id === enquiry.id),
   }));
+}
+
+export type AdminEnquiry = ReturnType<typeof getAdminEnquiries>[number];
+
+let adminEnquiriesInFlight: Promise<AdminEnquiry[]> | null = null;
+
+export async function getAdminEnquiriesFromApi(): Promise<AdminEnquiry[]> {
+  if (adminEnquiriesInFlight) return adminEnquiriesInFlight;
+
+  adminEnquiriesInFlight = (async () => {
+    let response: Response;
+    try {
+      response = await adminGet("/api/admin/enquiries");
+    } catch {
+      throw new Error("Could not reach the admin enquiries service.");
+    }
+
+    let payload: unknown = null;
+    try {
+      payload = await response.json();
+    } catch {
+      // Non-JSON response.
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        response.status === 401 || response.status === 403
+          ? "You do not have permission to view enquiries."
+          : "The enquiries list could not be loaded.",
+      );
+    }
+
+    const body =
+      isRecord(payload) && payload.success === true && "data" in payload
+        ? payload.data
+        : payload;
+    const items =
+      Array.isArray(body)
+        ? body
+        : isRecord(body) && Array.isArray(body.items)
+          ? body.items
+          : null;
+    if (!items) throw new Error("The enquiries list response was invalid.");
+
+    const updates = getEnquiryUpdates();
+    return items.map((entry, index) => {
+      if (!isRecord(entry)) throw new Error("An enquiry record was invalid.");
+      const id =
+        clientText(entry, ["id", "enquiryId", "inquiryId"]) ||
+        `enquiry-${index + 1}`;
+      const createdAt =
+        clientText(entry, ["createdAt", "createdOn", "receivedAt", "date"]) ||
+        new Date().toISOString();
+      const validCreatedAt = Number.isFinite(Date.parse(createdAt))
+        ? createdAt
+        : new Date().toISOString();
+      return {
+        id,
+        name: clientText(entry, ["name", "contactName"]) || "Not provided",
+        business:
+          clientText(entry, ["business", "businessName", "companyName"]) ||
+          "Not provided",
+        email: clientText(entry, ["email", "businessEmail"]) || "Not provided",
+        phone: clientText(entry, ["phone", "phoneNumber", "mobile"]),
+        goal:
+          clientText(entry, ["goal", "objective", "purpose"]) ||
+          "Not provided",
+        message: clientText(entry, ["message", "requirements", "notes"]),
+        createdAt: validCreatedAt,
+        update: updates.find((update) => update.id === id),
+      };
+    });
+  })();
+
+  try {
+    return await adminEnquiriesInFlight;
+  } finally {
+    adminEnquiriesInFlight = null;
+  }
 }
 
 export const demoCabs = [
