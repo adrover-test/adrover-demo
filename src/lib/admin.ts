@@ -159,78 +159,23 @@ function adminRequestHeaders(): Record<string, string> {
 async function adminGet(path: string): Promise<Response> {
   return fetch(`${baseUrl}${path}`, {
     method: "GET",
-    headers: adminRequestHeaders(),
+    headers: adminRequestHeaders(includeAuth),
   });
 }
 
-async function adminList(path: string, label: string): Promise<unknown[]> {
-  const entries: unknown[] = [];
-  for (let page = 1; ; page++) {
-    let response: Response;
-    try {
-      response = await adminGet(`${path}?pageNumber=${page}&pageSize=100`);
-    } catch {
-      throw new Error(`Could not reach the admin ${label} service.`);
-    }
-    if (!response.ok)
-      throw new Error(
-        response.status === 401 || response.status === 403
-          ? `You do not have permission to view ${label}.`
-          : `The ${label} list could not be loaded.`,
-      );
-    const payload: unknown = await response.json();
-    const body =
-      isRecord(payload) && payload.success === true && "data" in payload
-        ? payload.data
-        : payload;
-    if (Array.isArray(body)) return body;
-    if (
-      !isRecord(body) ||
-      !Array.isArray(body.items) ||
-      typeof body.total !== "number" ||
-      !Number.isSafeInteger(body.total) ||
-      body.total < 0
-    )
-      throw new Error(`The ${label} list response was invalid.`);
-    entries.push(...body.items);
-    if (entries.length >= body.total) return entries;
-    if (body.items.length === 0)
-      throw new Error(`The ${label} list could not be loaded completely.`);
-  }
-}
-
-export async function loginAdmin(
-  email: string,
-  password: string,
-): Promise<string> {
-  let response: Response;
-  try {
-    response = await fetch(`${baseUrl}/api/v1/auth/admin-login`, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ email, password }),
-    });
-  } catch {
-    throw new Error("Could not reach the admin sign-in service.");
-  }
-  if (!response.ok)
-    throw new Error(
-      response.status === 401
-        ? "Invalid email or password."
-        : "Admin sign-in failed. Please try again.",
-    );
-  const payload: unknown = await response.json();
-  if (
-    !isRecord(payload) ||
-    !isRecord(payload.data) ||
-    typeof payload.data.accessToken !== "string" ||
-    !payload.data.accessToken
-  )
-    throw new Error("The admin sign-in response was invalid.");
-  return payload.data.accessToken;
+async function adminPut(
+  path: string,
+  body: Record<string, unknown>,
+  includeAuth = true,
+): Promise<Response> {
+  return fetch(`${baseUrl}${path}`, {
+    method: "PUT",
+    headers: {
+      ...adminRequestHeaders(includeAuth),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
 }
 
 let dashboardSummaryInFlight: Promise<AdminDashboardSummary> | null = null;
@@ -455,7 +400,7 @@ function getEnquiryUpdates(): EnquiryUpdate[] {
   return value;
 }
 
-export function saveEnquiryUpdate(
+export async function saveEnquiryUpdate(
   id: string,
   status: EnquiryUpdate["status"],
   note: string,
@@ -468,11 +413,38 @@ export function saveEnquiryUpdate(
     throw new Error("Internal notes must be 2,000 characters or fewer.");
   if (note.length > 0 && !note.trim())
     throw new Error("Enter a note containing text, not just spaces.");
-  if (
-    !knownEnquiryIds.includes(id) &&
-    !getAdminEnquiries().some((enquiry) => enquiry.id === id)
-  )
-    throw new Error("This enquiry no longer exists. Reload the list.");
+  if (!id.trim()) throw new Error("Choose a valid enquiry before saving.");
+
+  let response: Response;
+  try {
+    response = await adminPut(
+      `/api/admin/enquiries/${encodeURIComponent(id)}/follow-up`,
+      {
+        replyStatus: status,
+        internalNote: note.trim(),
+      },
+    );
+  } catch {
+    throw new Error("Could not reach the admin follow-up service.");
+  }
+
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {
+    // Non-JSON response.
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      response.status === 401 || response.status === 403
+        ? "You do not have permission to update enquiries."
+        : isRecord(payload) && typeof payload.message === "string"
+          ? payload.message
+          : "The enquiry follow-up could not be saved.",
+    );
+  }
+
   const session: unknown = JSON.parse(sessionStorage.getItem(adminSessionKey)!);
   if (
     typeof session !== "object" ||
@@ -771,8 +743,8 @@ export async function getAdminEnquiriesFromApi(): Promise<AdminEnquiry[]> {
         name: clientText(entry, ["name", "contactName"]) || "Not provided",
         business:
           clientText(entry, [
-            "businessOrName",
             "business",
+            "businessOrName",
             "businessName",
             "companyName",
           ]) || "Not provided",
