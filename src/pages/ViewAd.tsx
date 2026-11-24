@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { PortalSidebar } from "../components/PortalSidebar";
+import { SchedulingStatus } from "../components/SchedulingStatus";
 import { getAdVideo } from "../lib/adVideos";
 import { AdLocationHistory } from "../components/AdLocationHistory";
 import type { Advertisement } from "../lib/advertisements";
@@ -149,6 +150,7 @@ export function ViewAd({
           </span>
         </div>
 
+        <SchedulingStatus state={ad} />
         <section
           className="dashboard-panel view-ad-status-bar"
           aria-label="Campaign status and days remaining"
@@ -262,7 +264,11 @@ export function ViewAd({
             <div className="dashboard-panel-heading">
               <div>
                 <h2>Creative preview</h2>
-                <p>{videoUrl ? "Your uploaded video ad" : "Campaign screen concept"}</p>
+                <p>
+                  {videoUrl
+                    ? "Your uploaded video ad"
+                    : "Campaign screen concept"}
+                </p>
               </div>
               <span className="dashboard-panel-tag">
                 {videoUrl ? "VIDEO" : "TEXT PREVIEW"}

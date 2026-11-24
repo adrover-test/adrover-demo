@@ -1,5 +1,7 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, type FormEvent } from "react";
 import { PortalSidebar } from "../components/PortalSidebar";
+import { SchedulingStatus } from "../components/SchedulingStatus";
+import { hasPlaybackStarted, isCampaignLocked } from "../lib/scheduling";
 import {
   getClientCampaign,
   getCampaignCreative,
@@ -11,9 +13,22 @@ import { requestDownload } from "../lib/download";
 import { getDashboardDraftUrl } from "../lib/portal";
 import { payForCampaign } from "../lib/campaignPaymentApi";
 import {
+  rescheduleAdvertisement,
   uploadAdvertisementImage,
   uploadAdvertisementVideo,
 } from "../lib/advertisementApi";
+
+function tomorrowInIndia(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(Date.now() + 86400000));
+  const part = (type: string) =>
+    parts.find((item) => item.type === type)?.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
 
 export function ClientViewAd() {
   const id = new URLSearchParams(location.search).get("id") ?? "";
@@ -26,6 +41,10 @@ export function ClientViewAd() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadStatus, setUploadStatus] = useState("");
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [rescheduling, setRescheduling] = useState(false);
+  const [rescheduleError, setRescheduleError] = useState("");
+  const [rescheduleStatus, setRescheduleStatus] = useState("");
   const loadCampaign = useCallback(() => getClientCampaign(id), [id]);
   const loadCreative = useCallback(() => getCampaignCreative(id), [id]);
   const loadPlayback = useCallback(
@@ -37,12 +56,67 @@ export function ClientViewAd() {
   const playback = useClientResource(loadPlayback);
   const ad = campaign.data;
 
+  async function reschedule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (
+      !ad ||
+      !ad.setupValidationMessage ||
+      hasPlaybackStarted(ad) ||
+      rescheduling
+    )
+      return;
+    setRescheduleError("");
+    setRescheduleStatus("");
+    if (!rescheduleDate || rescheduleDate < tomorrowInIndia()) {
+      setRescheduleError(
+        "Choose a start date no earlier than tomorrow in India.",
+      );
+      return;
+    }
+    setRescheduling(true);
+    try {
+      await rescheduleAdvertisement(ad.id, rescheduleDate);
+      setRescheduleStatus(
+        "Start date updated. Scheduling remains subject to confirmation.",
+      );
+      setRescheduleDate("");
+    } catch (error) {
+      setRescheduleError(
+        error instanceof Error
+          ? error.message
+          : "Could not reschedule this campaign. Please try again.",
+      );
+    } finally {
+      campaign.refresh();
+      setRescheduling(false);
+    }
+  }
+
+  const canUploadMissingVideo = Boolean(
+    ad &&
+    !ad.hasVideo &&
+    !hasPlaybackStarted(ad) &&
+    ["Draft", "Pending approval", "Approved", "Active"].includes(ad.status),
+  );
+  const canUploadMissingBanner = Boolean(
+    ad &&
+    ad.status === "Pending approval" &&
+    ad.paidAmount === 0 &&
+    !ad.hasBanner &&
+    !isCampaignLocked(ad),
+  );
+
   async function upload(file: File | undefined, kind: "video" | "banner") {
-    if (!file || uploading) return;
+    if (
+      !file ||
+      uploading ||
+      !ad ||
+      (kind === "video" ? !canUploadMissingVideo : !canUploadMissingBanner)
+    )
+      return;
     setUploadError("");
     setUploadStatus("");
-    const allowed =
-      kind === "video" ? /\.(mp4|webm|mov)$/i : /\.(png|jpe?g|webp)$/i;
+    const allowed = kind === "video" ? /\.(mp4|mov)$/i : /\.(png|jpe?g|webp)$/i;
     if (
       !allowed.test(file.name) ||
       !file.size ||
@@ -50,7 +124,7 @@ export function ClientViewAd() {
     ) {
       setUploadError(
         kind === "video"
-          ? "Choose a non-empty MP4, WebM or MOV of 100 MB or less."
+          ? "Choose a non-empty MP4 or MOV of 100 MB or less."
           : "Choose a non-empty PNG, JPEG or WebP of 5 MB or less.",
       );
       return;
@@ -140,6 +214,12 @@ export function ClientViewAd() {
             </button>
           </div>
         )}
+        {rescheduleStatus && <p role="status">{rescheduleStatus}</p>}
+        {rescheduleError && (
+          <p role="alert" className="error">
+            {rescheduleError}
+          </p>
+        )}
         {ad && (
           <>
             <header className="dashboard-heading">
@@ -181,9 +261,42 @@ export function ClientViewAd() {
                           ? "This campaign has been cancelled."
                           : ad.status === "Completed"
                             ? "Your campaign has finished."
-                            : "Your campaign is active."}
+                            : ad.status === "Started"
+                              ? "Your campaign has started."
+                              : "Your campaign is active."}
               </p>
-              {ad.status === "Draft" && (
+              <SchedulingStatus state={ad} />
+              {ad.setupValidationMessage && !hasPlaybackStarted(ad) && (
+                <form
+                  onSubmit={(event) => void reschedule(event)}
+                  aria-label="Reschedule campaign"
+                >
+                  <label htmlFor="reschedule-start-date">
+                    New start date (India time)
+                  </label>
+                  <input
+                    id="reschedule-start-date"
+                    type="date"
+                    required
+                    min={tomorrowInIndia()}
+                    value={rescheduleDate}
+                    disabled={rescheduling}
+                    onChange={(event) => setRescheduleDate(event.target.value)}
+                  />
+                  <p>
+                    Choose tomorrow or later in India. Your request is subject
+                    to approval by the server.
+                  </p>
+                  <button
+                    type="submit"
+                    className="button yellow small"
+                    disabled={rescheduling}
+                  >
+                    {rescheduling ? "Updating..." : "Update start date"}
+                  </button>
+                </form>
+              )}
+              {ad.status === "Draft" && !isCampaignLocked(ad) && (
                 <a
                   className="button yellow small"
                   href={getDashboardDraftUrl(ad.id)}
@@ -207,57 +320,55 @@ export function ClientViewAd() {
                 </p>
               )}
             </section>
-            {ad.status === "Pending approval" &&
-              ad.paidAmount === 0 &&
-              (!ad.hasVideo || !ad.hasBanner) && (
-                <section
-                  className="dashboard-panel client-creative-retry"
-                  aria-label="Finish creative upload"
-                >
-                  <h2>Finish your creative</h2>
-                  <p>
-                    Files already saved are kept. Add any remaining files here.
+            {(canUploadMissingVideo || canUploadMissingBanner) && (
+              <section
+                className="dashboard-panel client-creative-retry"
+                aria-label="Finish creative upload"
+              >
+                <h2>Finish your creative</h2>
+                <p>
+                  Files already saved are kept. Add any remaining files here.
+                </p>
+                {canUploadMissingVideo && (
+                  <label>
+                    Upload campaign video
+                    <input
+                      type="file"
+                      accept=".mp4,.mov"
+                      disabled={uploading}
+                      onChange={(event) => {
+                        void upload(event.target.files?.[0], "video");
+                        event.target.value = "";
+                      }}
+                    />
+                  </label>
+                )}
+                {canUploadMissingBanner && (
+                  <label>
+                    Upload optional banner
+                    <input
+                      type="file"
+                      accept=".png,.jpg,.jpeg,.webp"
+                      disabled={uploading}
+                      onChange={(event) => {
+                        void upload(event.target.files?.[0], "banner");
+                        event.target.value = "";
+                      }}
+                    />
+                  </label>
+                )}
+                {uploading && (
+                  <p role="status">
+                    Uploading your creative. Keep this page open...
                   </p>
-                  {!ad.hasVideo && (
-                    <label>
-                      Upload campaign video
-                      <input
-                        type="file"
-                        accept=".mp4,.webm,.mov"
-                        disabled={uploading}
-                        onChange={(event) => {
-                          void upload(event.target.files?.[0], "video");
-                          event.target.value = "";
-                        }}
-                      />
-                    </label>
-                  )}
-                  {!ad.hasBanner && (
-                    <label>
-                      Upload optional banner
-                      <input
-                        type="file"
-                        accept=".png,.jpg,.jpeg,.webp"
-                        disabled={uploading}
-                        onChange={(event) => {
-                          void upload(event.target.files?.[0], "banner");
-                          event.target.value = "";
-                        }}
-                      />
-                    </label>
-                  )}
-                  {uploading && (
-                    <p role="status">
-                      Uploading your creative. Keep this page open...
-                    </p>
-                  )}
-                  {uploadError && (
-                    <p className="error" role="alert">
-                      {uploadError}
-                    </p>
-                  )}
-                </section>
-              )}
+                )}
+                {uploadError && (
+                  <p className="error" role="alert">
+                    {uploadError}
+                  </p>
+                )}
+              </section>
+            )}
             {uploadStatus && <p role="status">{uploadStatus}</p>}
             <section className="view-ad-top-grid">
               <article className="dashboard-panel view-ad-summary">

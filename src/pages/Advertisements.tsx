@@ -8,6 +8,7 @@ import { SavedRegistrations } from "../components/SavedRegistrations";
 const filters = [
   "All ads",
   "Active" satisfies AdvertisementStatus,
+  "Started" satisfies AdvertisementStatus,
   "Pending approval" satisfies AdvertisementStatus,
   "Approved" satisfies AdvertisementStatus,
   "Completed" satisfies AdvertisementStatus,
@@ -58,6 +59,7 @@ export function Advertisements() {
   const counts = {
     "All ads": allAds.length,
     Active: allAds.filter((ad) => ad.status === "Active").length,
+    Started: allAds.filter((ad) => ad.status === "Started").length,
     "Pending approval": allAds.filter((ad) => ad.status === "Pending approval")
       .length,
     Completed: allAds.filter((ad) => ad.status === "Completed").length,
@@ -109,7 +111,8 @@ export function Advertisements() {
             <span className="dashboard-stat-label">Total advertisements</span>
             <strong>{data ? `${allAds.length} campaigns` : "—"}</strong>
             <span className="dashboard-stat-foot">
-              {counts.Active} active · {counts["Pending approval"]} pending
+              {counts.Active + counts.Started} active ·{" "}
+              {counts["Pending approval"]} pending
             </span>
           </article>
           <article className="dashboard-stat">
@@ -303,7 +306,7 @@ export function Advertisements() {
                           : ad.status}
                   </strong>
                   <span>
-                    {ad.status === "Active"
+                    {ad.status === "Active" || ad.status === "Started"
                       ? ad.dates
                       : ad.status === "Pending approval" ||
                           ad.status === "Approved"
@@ -311,7 +314,7 @@ export function Advertisements() {
                         : ad.dates}
                   </span>
                   <span className="ad-list-run-detail">
-                    {ad.status === "Active"
+                    {ad.status === "Active" || ad.status === "Started"
                       ? `${ad.cabs} cabs · ${ad.fleet}`
                       : ad.status === "Pending approval" ||
                           ad.status === "Approved"

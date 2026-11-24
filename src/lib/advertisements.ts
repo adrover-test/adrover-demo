@@ -1,7 +1,16 @@
-export type AdvertisementStatus =
-  "Active" | "Pending approval" | "Approved" | "Completed" | "Draft" | "Rejected" | "Cancelled";
+import type { SchedulingState } from "./scheduling";
 
-export type Advertisement = {
+export type AdvertisementStatus =
+  | "Active"
+  | "Started"
+  | "Pending approval"
+  | "Approved"
+  | "Completed"
+  | "Draft"
+  | "Rejected"
+  | "Cancelled";
+
+export type Advertisement = SchedulingState & {
   id: string;
   name: string;
   brand: string;

@@ -52,12 +52,12 @@ export function VideoPreview({
         <div className="video-upload-box">
           <label htmlFor="campaign-video">Choose your video</label>
           <p id="video-guidance">
-            {onVideoChange ? "MP4, WebM or MOV" : "MP4 or WebM"} · up to 100 MB · browser-supported codecs.
+            MP4 or MOV · up to 100 MB · browser-supported codecs.
           </p>
           <input
             id="campaign-video"
             type="file"
-            accept={onVideoChange ? "video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" : "video/mp4,video/webm,.mp4,.webm"}
+            accept="video/mp4,video/quicktime,.mp4,.mov"
             aria-describedby="video-guidance video-privacy video-error"
             aria-invalid={Boolean(error)}
             disabled={disabled}
@@ -68,13 +68,11 @@ export function VideoPreview({
               clearVideo();
               const extension = selected.name.split(".").pop()?.toLowerCase();
               if (
-                !(onVideoChange ? ["mp4", "webm", "mov"] : ["mp4", "webm"]).includes(extension ?? "") ||
+                !["mp4", "mov"].includes(extension ?? "") ||
                 (selected.type &&
-                  !(onVideoChange ? ["video/mp4", "video/webm", "video/quicktime"] : ["video/mp4", "video/webm"]).includes(
-                    selected.type,
-                  ))
+                  !["video/mp4", "video/quicktime"].includes(selected.type))
               ) {
-                setError("Choose an MP4, WebM or MOV video.");
+                setError("Choose an MP4 or MOV video.");
                 return;
               }
               if (selected.size === 0 || selected.size > MAX_VIDEO_BYTES) {
@@ -97,7 +95,12 @@ export function VideoPreview({
             <div className="video-file-details">
               <strong>{file.name}</strong>
               <span>{(file.size / 1024 / 1024).toFixed(1)} MB</span>
-              <button className="text-link" type="button" onClick={clearVideo} disabled={disabled}>
+              <button
+                className="text-link"
+                type="button"
+                onClick={clearVideo}
+                disabled={disabled}
+              >
                 Remove video
               </button>
             </div>
@@ -157,12 +160,14 @@ export function VideoPreview({
                   if (video.videoWidth === 0 || video.videoHeight === 0) {
                     onVideoChange?.(null);
                     setError(
-                      "This file does not contain a supported video. Try exporting it as MP4 (H.264) or WebM.",
+                      "This file does not contain a supported video. Try exporting it as MP4 (H.264) or MOV.",
                     );
                     return;
                   }
                   if (!Number.isFinite(video.duration) || video.duration <= 0) {
-                    setError("The video duration could not be read. Choose another file.");
+                    setError(
+                      "The video duration could not be read. Choose another file.",
+                    );
                     onVideoChange?.(null);
                     return;
                   }
@@ -180,7 +185,7 @@ export function VideoPreview({
                   setDetails("");
                   onVideoChange?.(null);
                   setError(
-                    "This video could not be played. Try another file or export as MP4 (H.264) or WebM.",
+                    "This video could not be played. Try another file or export as MP4 (H.264) or MOV.",
                   );
                 }}
               />

@@ -22,7 +22,7 @@ export function Faq() {
         <details>
           <summary>Can I upload a video now?</summary>
           <p>
-            You can choose an MP4 or WebM on the campaign page and play it in a
+            You can choose an MP4 or MOV on the campaign page and play it in a
             cab-screen mockup. It stays on your device. Sending files to Adrover
             and final screen compatibility must be confirmed before launch.
           </p>

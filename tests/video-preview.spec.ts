@@ -88,7 +88,7 @@ test("Register saves its campaign with the account and uploads immediately with 
         return;
       }
       expect(route.request().postData()).toContain(
-        'name="file"; filename="campaign.webm"',
+        'name="file"; filename="campaign.mp4"',
       );
       draft.hasVideo = true;
     } else if (path.endsWith("/upload-image")) {
@@ -212,11 +212,11 @@ test("Register saves its campaign with the account and uploads immediately with 
     canvas.width = 320;
     canvas.height = 180;
     const stream = canvas.captureStream(10);
-    const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+    const recorder = new MediaRecorder(stream, { mimeType: "video/mp4" });
     const chunks: Blob[] = [];
     const done = new Promise<Blob>((resolve) => {
       recorder.ondataavailable = (event) => chunks.push(event.data);
-      recorder.onstop = () => resolve(new Blob(chunks, { type: "video/webm" }));
+      recorder.onstop = () => resolve(new Blob(chunks, { type: "video/mp4" }));
     });
     recorder.start();
     for (let i = 0; i < 10; i++) {
@@ -231,8 +231,8 @@ test("Register saves its campaign with the account and uploads immediately with 
     return Array.from(new Uint8Array(await blob.arrayBuffer()));
   });
   await input.setInputFiles({
-    name: "campaign.webm",
-    mimeType: "video/webm",
+    name: "campaign.mp4",
+    mimeType: "video/mp4",
     buffer: Buffer.from(bytes),
   });
   await expect(page.locator(".registration-source")).toContainText("320 × 180");

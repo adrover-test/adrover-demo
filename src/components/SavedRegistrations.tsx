@@ -5,6 +5,8 @@ import {
 } from "../lib/advertisementApi";
 import { getDashboardDraftUrl } from "../lib/portal";
 import { AdvertiserRegistration } from "./AdvertiserRegistration";
+import { isCampaignLocked } from "../lib/scheduling";
+import { SchedulingStatus } from "./SchedulingStatus";
 
 type DraftStep = "creative" | "plan" | "review" | "payment";
 
@@ -16,6 +18,15 @@ const steps: { id: DraftStep; label: string }[] = [
 ];
 
 function getNextStep(draft: RegistrationDraft) {
+  if (isCampaignLocked(draft)) {
+    return {
+      current: "payment" as DraftStep,
+      title: "Campaign edits locked",
+      description: "View the campaign for its current status.",
+      action: "View campaign",
+      complete: false,
+    };
+  }
   if (draft.paidAmount > 0) {
     return {
       current: "payment" as DraftStep,
@@ -238,6 +249,7 @@ export function SavedRegistrations({
                       </li>
                     ))}
                   </ol>
+                  <SchedulingStatus state={draft} />
                   <div className="saved-campaign-next">
                     <span
                       className="saved-campaign-next-icon"
@@ -256,7 +268,14 @@ export function SavedRegistrations({
                     {draft.hasVideo ? "Video saved" : "Video missing"} ·{" "}
                     {draft.hasBanner ? "Banner saved" : "Banner missing"}
                   </span>
-                  {resumeInDashboard ? (
+                  {isCampaignLocked(draft) ? (
+                    <a
+                      className="button yellow small"
+                      href={`view-ad.html?id=${encodeURIComponent(draft.id)}`}
+                    >
+                      View campaign
+                    </a>
+                  ) : resumeInDashboard ? (
                     <button
                       className="button yellow small"
                       type="button"

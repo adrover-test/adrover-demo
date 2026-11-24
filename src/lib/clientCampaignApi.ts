@@ -1,4 +1,5 @@
 import { send } from "./advertisementApi";
+import { readSchedulingState, type SchedulingState } from "./scheduling";
 import type { Advertisement, AdvertisementStatus } from "./advertisements";
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -19,17 +20,19 @@ const statuses: Record<string, AdvertisementStatus> = {
   PendingApproval: "Pending approval",
   Approved: "Approved",
   Active: "Active",
+  Started: "Started",
   Completed: "Completed",
   Rejected: "Rejected",
   Cancelled: "Cancelled",
 };
-export type ClientCampaign = Advertisement & {
-  amount: number;
-  paidAmount: number;
-  rejectionReason: string | null;
-  hasVideo: boolean;
-  hasBanner: boolean;
-};
+export type ClientCampaign = Advertisement &
+  SchedulingState & {
+    amount: number;
+    paidAmount: number;
+    rejectionReason: string | null;
+    hasVideo: boolean;
+    hasBanner: boolean;
+  };
 function campaign(value: unknown): ClientCampaign {
   if (!record(value))
     throw new Error("Campaign details could not be loaded. Please try again.");
@@ -48,13 +51,14 @@ function campaign(value: unknown): ClientCampaign {
     ? Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000))
     : 0;
   const days =
-    status === "Active"
+    status === "Active" || status === "Started"
       ? Math.max(0, Math.floor((Date.now() - start.getTime()) / 86400000))
       : status === "Completed"
         ? totalDays
         : 0;
   const brand = text(value.brand);
   return {
+    ...readSchedulingState(value),
     id: text(value.id),
     name: text(value.name),
     brand,

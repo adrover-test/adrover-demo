@@ -1,3 +1,5 @@
+import { isCampaignLocked, type SchedulingState } from "../lib/scheduling";
+import { SchedulingStatus } from "./SchedulingStatus";
 import {
   useEffect,
   useLayoutEffect,
@@ -92,6 +94,7 @@ export function AdvertiserRegistration({
   const [success, setSuccess] = useState(false);
   const [paying, setPaying] = useState(false);
   const [paymentStarted, setPaymentStarted] = useState(false);
+  const [scheduling, setScheduling] = useState<SchedulingState>({});
   const [loadingDraft, setLoadingDraft] = useState(Boolean(draftId));
   const [startDate, setStartDate] = useState("");
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
@@ -139,6 +142,7 @@ export function AdvertiserRegistration({
     getRegistrationDraft(draftId)
       .then((draft) => {
         if (cancelled) return;
+        setScheduling(draft);
         const p = draft.progress;
         lastSaved.current = serializeProgress(p);
         resumeAfterCreative.current = p.step;
@@ -213,6 +217,7 @@ export function AdvertiserRegistration({
     accountSignedIn &&
     !loadingDraft &&
     !paymentStarted &&
+    !isCampaignLocked(scheduling) &&
     !success,
   );
   const busy = uploading || paying || advancing || closing;
@@ -314,8 +319,11 @@ export function AdvertiserRegistration({
     setVideoDuration(null);
     setVideoError("");
     if (!file) return;
-    if (!["video/mp4", "video/webm"].includes(file.type)) {
-      setVideoError("Choose an MP4 or WebM video.");
+    if (
+      !/\.(mp4|mov)$/i.test(file.name) ||
+      (file.type && !["video/mp4", "video/quicktime"].includes(file.type))
+    ) {
+      setVideoError("Choose an MP4 or MOV video.");
       return;
     }
     if (!file.size || file.size > 100 * 1024 * 1024) {
@@ -666,6 +674,7 @@ export function AdvertiserRegistration({
       </div>
       <div className="registration-layout">
         <div className="dashboard-panel registration-panel">
+          <SchedulingStatus state={scheduling} />
           {campaignId && (
             <p
               className="registration-save-status visually-hidden"
@@ -789,12 +798,12 @@ export function AdvertiserRegistration({
                       id="registration-video"
                       type="file"
                       disabled={uploading || videoUploaded}
-                      accept="video/mp4,video/webm,.mp4,.webm"
+                      accept="video/mp4,video/quicktime,.mp4,.mov"
                       aria-describedby="registration-video-guidance"
                       onChange={(event) => selectVideo(event.target.files?.[0])}
                     />
                     <p className="fine" id="registration-video-guidance">
-                      MP4 or WebM · up to 100 MB. Uploaded immediately after
+                      MP4 or MOV · up to 100 MB. Uploaded immediately after
                       account registration and sign-in.
                     </p>
                     {videoError && (
@@ -1394,6 +1403,11 @@ export function AdvertiserRegistration({
           >
             {!calculation.ok && calculation.error}
           </p>
+          <p>
+            Planning uses a 10-hour operating day. Daily allocation begins on
+            the inclusive start date; after completion, available slots may use
+            a house ad. Scheduling and delivery remain subject to confirmation.
+          </p>
           <p id="summary-pricing-note">
             Estimated plays = plays per day × campaign days; cab count does not
             affect the estimate. Each play is 30 seconds at ₹0.30. Minimums are
@@ -1441,7 +1455,24 @@ export function AdvertiserRegistration({
     </section>
   );
 
-  if (!inDashboard) return wizard;
+  const lockedNotice = (
+    <section className="dashboard-panel">
+      <h3>Campaign edits are locked</h3>
+      <SchedulingStatus state={scheduling} />
+      <a href={`view-ad.html?id=${encodeURIComponent(campaignId)}`}>
+        View campaign
+      </a>
+    </section>
+  );
+
+  if (!inDashboard)
+    return loadingDraft ? (
+      <p role="status">Loading your saved campaign...</p>
+    ) : isCampaignLocked(scheduling) ? (
+      lockedNotice
+    ) : (
+      wizard
+    );
 
   return (
     <dialog
@@ -1500,6 +1531,8 @@ export function AdvertiserRegistration({
           <p className="error" role="alert">
             {error}
           </p>
+        ) : isCampaignLocked(scheduling) ? (
+          lockedNotice
         ) : success ? (
           <section className="dashboard-panel campaign-setup-complete">
             <span className="registration-success-icon" aria-hidden="true">

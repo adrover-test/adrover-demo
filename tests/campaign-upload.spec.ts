@@ -7,11 +7,11 @@ async function makeVideo(page: Page): Promise<number[]> {
     canvas.width = 320;
     canvas.height = 180;
     const stream = canvas.captureStream(10);
-    const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+    const recorder = new MediaRecorder(stream, { mimeType: "video/mp4" });
     const chunks: Blob[] = [];
     const result = new Promise<Blob>((resolve) => {
       recorder.ondataavailable = (event) => chunks.push(event.data);
-      recorder.onstop = () => resolve(new Blob(chunks, { type: "video/webm" }));
+      recorder.onstop = () => resolve(new Blob(chunks, { type: "video/mp4" }));
     });
     recorder.start();
     for (let frame = 0; frame < 10; frame++) {
@@ -31,8 +31,8 @@ async function selectVideo(page: Page, bytes: number[]) {
   await page.evaluate((contents) => {
     const input = document.querySelector<HTMLInputElement>("#campaign-video");
     if (!input) throw new Error("Video input not found");
-    const file = new File([new Uint8Array(contents)], "campaign.webm", {
-      type: "video/webm",
+    const file = new File([new Uint8Array(contents)], "campaign.mp4", {
+      type: "video/mp4",
       lastModified: 123456,
     });
     const transfer = new DataTransfer();
@@ -84,16 +84,14 @@ test("creates a backend campaign and attaches its selected video", async ({
   await seedDemoSession(page, "client@example.com", "create-ad.html");
   const bytes = await makeVideo(page);
   await fillCampaign(page, bytes);
-  await page
-    .locator("#ad-banner")
-    .setInputFiles({
-      name: "banner.png",
-      mimeType: "image/png",
-      buffer: Buffer.from(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==",
-        "base64",
-      ),
-    });
+  await page.locator("#ad-banner").setInputFiles({
+    name: "banner.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==",
+      "base64",
+    ),
+  });
   await page
     .getByRole("button", { name: "Create campaign and upload video" })
     .click();
@@ -119,7 +117,7 @@ test("creates a backend campaign and attaches its selected video", async ({
   });
   expect(requests[1].path).toBe("/api/Advertisements/ad-123/upload-video");
   expect(requests[1].auth).toBe("Bearer test-token");
-  expect(requests[1].body).toContain('name="file"; filename="campaign.webm"');
+  expect(requests[1].body).toContain('name="file"; filename="campaign.mp4"');
   expect(requests[2].path).toBe("/api/Advertisements/ad-123/upload-image");
   expect(requests[2].body).toContain('name="file"; filename="banner.png"');
   expect(
@@ -171,9 +169,7 @@ test("retries a failed video upload after reload without creating another campai
     "Your campaign is already saved",
   );
   await page.reload();
-  await expect(page.locator(".create-ad-status")).toContainText(
-    "campaign.webm",
-  );
+  await expect(page.locator(".create-ad-status")).toContainText("campaign.mp4");
   await selectVideo(page, bytes);
   await page.getByRole("button", { name: "Retry video upload" }).click();
   await expect(page.locator(".create-ad-status")).toContainText(

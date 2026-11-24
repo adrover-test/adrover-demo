@@ -302,6 +302,7 @@ test("campaign details retry a remaining banner without recreating the campaign"
           items: [
             {
               ...campaign,
+              actualPlays: 0,
               imageUrl: savedBanner ? "https://media.invalid/banner.png" : null,
             },
           ],

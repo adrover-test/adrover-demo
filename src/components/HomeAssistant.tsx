@@ -75,7 +75,7 @@ function answerQuestion(question: string): Reply {
     )
   ) {
     return {
-      text: "You can preview an MP4 or WebM video in the campaign studio. The preview file stays on your device and is not sent to Adrover; it also does not transfer to the registration page. Confirm final creative and screen requirements before booking.",
+      text: "You can preview an MP4 or MOV video in the campaign studio. The preview file stays on your device and is not sent to Adrover; it also does not transfer to the registration page. Confirm final creative and screen requirements before booking.",
       href: "pricing.html#planner",
       linkText: "Explore the campaign studio",
     };

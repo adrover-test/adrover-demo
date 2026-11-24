@@ -54,7 +54,7 @@ saves pending edits before updating the campaign card. The popup shows save
 failures and lets you retry or discard unsaved changes. On Review, choose the requested start
 date and accept the terms before continuing to payment. Creating a draft or
 uploading files does not charge the client.
-MP4/WebM videos must be non-empty, browser-playable, have a readable finite duration
+MP4/MOV videos must be non-empty, browser-playable, have a readable finite duration
 and be at most 100 MB. The old `pricing.html#registration` URL redirects to
 `register.html`; Pricing remains a separate calculator and video-preview page.
 | `contact.html`        | `src/pages/Contact.tsx`        | Campaign handoff and local enquiry draft  |
@@ -217,7 +217,7 @@ For other environments, set `VITE_API_BASE_URL` to their backend origin; when un
 requests go to the website's origin. The backend must allow the website's origin
 through CORS. An active Client account must already exist in the backend. Tokens are
 stored in session storage and cleared on sign-out. The Create Ad page now creates a
-campaign through `POST /api/Advertisements`, then uploads the selected MP4, WebM or
+campaign through `POST /api/Advertisements`, then uploads the selected MP4 or
 MOV through `POST /api/Advertisements/{id}/upload-video` and the optional banner
 through `POST /api/Advertisements/{id}/upload-image`, using the client token.
 Upload retries reuse the saved campaign; a banner-only retry does not upload the
@@ -231,6 +231,19 @@ Campaign details use owner-checked `/api/ClientDashboard/campaigns/{id}/creative
 for 15-minute private preview URLs and `/playback` for date-filtered recorded plays
 with pagination. No fabricated locations or sample charts are used in client views.
 Missing data, load failures and empty results have separate visible states.
+Campaign planning uses a 10-hour operating day and includes the start date in daily
+allocation; available slots may use a house ad after completion. Delivery and
+scheduling are not guaranteed. When supplied by the backend, campaign details
+show content processing, scheduling readiness, first playback date and setup validation; started or
+non-editable campaigns cannot have their settings edited in the client interface.
+A missing video can still be uploaded after payment before playback, subject to
+server validation; processing state is shown only when returned by the backend.
+When the backend
+returns a setup validation message and playback has not started, campaign details
+offer a new start date from tomorrow in India. The server decides whether the
+reschedule is allowed; it may reject prior provider submissions or playback.
+Older DTOs without these fields keep their existing behavior. The admin approval view is
+still illustrative browser-local data, not a live scheduling console.
 Deploy the updated backend before the frontend; restart an existing local debug
 session to load the new controller endpoints. Existing local branding,
 system fonts, and a cropped cab image from the supplied visual reference are used.
@@ -281,7 +294,7 @@ and draft downloads retain the contact form's existing behavior; live callback
 delivery still requires a backend.
 
 On `pricing.html`, visitors can select an MP4
-or WebM file (up to 100 MB), play it inside the cab-screen mockup and adjust the
+or MOV file (up to 100 MB), play it inside the cab-screen mockup and adjust the
 existing pricing calculator. Video uses `object-fit: contain` to preserve its
 aspect ratio and supports native seeking, sound and full-screen controls.
 Playback starts only on request and is initially muted.

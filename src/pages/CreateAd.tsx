@@ -422,6 +422,12 @@ export function CreateAd() {
                   required
                 />
               </div>
+              <p className="fine">
+                Planning uses a 10-hour operating day. Daily allocation begins
+                on the inclusive start date; available slots may use a house ad
+                after completion. Scheduling and delivery are subject to
+                confirmation.
+              </p>
               <div className="field">
                 <label htmlFor="start-date">Start date *</label>
                 <input
@@ -580,7 +586,7 @@ export function CreateAd() {
                 Add and preview your creative
               </h2>
               <p>
-                Choose an MP4, WebM or MOV and check it plays correctly before
+                Choose an MP4 or MOV and check it plays correctly before
                 submitting.
               </p>
             </div>

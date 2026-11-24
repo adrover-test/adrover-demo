@@ -290,9 +290,14 @@ export function CampaignPlanner({
         </aside>
       </div>
       <p className="fine">
+        Planning uses a 10-hour operating day. Daily allocation begins on the
+        inclusive start date; available slots may use a house ad after
+        completion. Scheduling and delivery are subject to confirmation.
+      </p>
+      <p className="fine">
         Estimated plays = plays per day × campaign days; cabs do not affect the
-        estimate. Each 30-second play costs ₹0.30. Minimums: 1,000 plays per
-        day and 7 days. Taxes and final placement details apply at checkout.
+        estimate. Each 30-second play costs ₹0.30. Minimums: 1,000 plays per day
+        and 7 days. Taxes and final placement details apply at checkout.
       </p>
     </section>
   );

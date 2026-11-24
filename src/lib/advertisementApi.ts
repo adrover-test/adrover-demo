@@ -1,4 +1,5 @@
 import { getClientToken } from "./clientAuth";
+import { readSchedulingState, type SchedulingState } from "./scheduling";
 
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? "")
   .trim()
@@ -112,6 +113,25 @@ export async function createAdvertisement(
   return { id };
 }
 
+export async function rescheduleAdvertisement(
+  advertisementId: string,
+  startDate: string,
+): Promise<void> {
+  const result = await send(
+    `${advertisementsRoot}/${encodeURIComponent(advertisementId)}/reschedule`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ startDate }),
+    },
+  );
+  if (!isRecord(result) || result.id !== advertisementId) {
+    throw new Error(
+      "We could not confirm the change. Check your campaign before trying again.",
+    );
+  }
+}
+
 export async function uploadAdvertisementVideo(
   advertisementId: string,
   file: File,
@@ -150,7 +170,7 @@ export type RegistrationProgress = {
   consent: boolean;
 };
 
-export type RegistrationDraft = {
+export type RegistrationDraft = SchedulingState & {
   id: string;
   progress: RegistrationProgress;
   hasVideo: boolean;
@@ -192,6 +212,7 @@ function parseDraft(value: unknown): RegistrationDraft {
     );
   }
   return {
+    ...readSchedulingState(value),
     id: value.id,
     hasVideo: value.hasVideo,
     hasBanner: value.hasBanner,
